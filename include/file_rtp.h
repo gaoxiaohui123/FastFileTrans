@@ -25,10 +25,12 @@ EXTERNC {
 #endif
 
 #include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
+#include <math.h>
 
-
-#defin FILE_PLT 130
+#define FILE_PLT 130
 #define FIX_MTU_SIZE 1400
 #define MTU_SIZE 1100
 #define RAW_OFFSET 4//2
@@ -137,27 +139,45 @@ typedef struct {
     unsigned int data_type : 3;         //1:file start info;2:file end info; 0:raw data
     unsigned int enable_encrypt : 1;    //是否加密
     unsigned int enable_fec : 1;         //是否开启fec
-    unsigned int block_id;
+    unsigned int frame_id : 8;
+    unsigned int group_id : 16;
+    unsigned int pkt_idx;
     unsigned int rtp_xorcode;           //当前数据块（包括rtp头）异或码
 } FILE_EXTEND_HEADER;
 typedef struct{
     unsigned long long filesize;    //文件大小（maxsize = 4T?）
-    unsigned int block_size : 16:   //mtu size, 默认1100bytes
+    unsigned int block_size : 16;   //mtu size, 默认1100bytes
+    unsigned int frame_size : 8;    //default: 256
+    unsigned int group_size : 16;    //default: 64MB
     unsigned int block_num;         //block 个数 = filesize / block_size
+    unsigned int frame_num;
+    unsigned int group_num;
     unsigned int file_xorcode;      //文件异或码（文件首个64MBytes）
     unsigned char filename[256];    //文件名
 }FileInfo;
 
 typedef struct{
+    unsigned int rtp_pkt_size : 16;     //当前rtp包大小
+    unsigned int data_type : 3;         //1:file start info;2:file end info; 0:raw data
+    unsigned int enable_encrypt : 1;    //是否加密
+    unsigned int frame_id : 8;
+    unsigned int group_id : 16;
+    unsigned int pkt_idx;
+}CacheHead;
+typedef struct{
     FileInfo info;
     char *data;
     int data_size;
-    unsigned short seq_no;
-    unsigned int block_id;
-    unsigned int data_xorcode;           //每一块数据的异或值与上一次的异或值的异或码
+    unsigned short seq_no;          //block id
+    unsigned int frame_id;
+    unsigned int group_id;          //
+    unsigned int data_xorcode;      //每一块数据的异或值与上一次的异或值的异或码
     unsigned int enable_encrypt;    //是否加密
     unsigned int enable_fec;         //是否开启fec
     unsigned long long snd_size;
+    unsigned int pkt_idx;//4*1024*1024*1024*1024;//4T
+    FILE *index_fp;
+    FILE *raw_fp;
 }FileRtpObj;
 
 #define MAX_RTP_EXTEND_SIZE (sizeof(EXTEND_HEADER) + sizeof(NACK_HEADER) + sizeof(FEC_HEADER))
