@@ -168,6 +168,7 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
     while(offset < data_size)
     {
         int pkt_size = oSize[i];
+        oSize[i] = 0;
         char *src_ptr = (char *)&data[offset];
         RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)&data[offset];
         FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&data[offset + rtp_header_size];
@@ -207,6 +208,7 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
                 dst_head->pkt_idx = rtp_ext->pkt_idx;
                 //
                 offset2 += dst_pkt_size;
+                oSize[i] = rtp_ext->rtp_pkt_size + sizeof(CacheHead);
             }
         }
         offset += pkt_size;
@@ -215,12 +217,68 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
     ret = offset2;
     return ret;
 }
+int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, short *pkt_size, int size, unsigned int *p_pkt_idx)
+{
+    int ret = 0;
+    int offset = 0;
+    int offset2 = 0;
+    int i = 0;
+    unsigned int last_pkt_idx = p_pkt_idx[0];
+    char pnull[2048] = {0};
+    while(offset < size)
+    {
+        char *src_ptr = &pkt_buf[offset];
+        CacheHead *src_head = (CacheHead *)src_ptr;
+        unsigned int pkt_idx = src_head->pkt_idx;
+        int rtp_pkt_size = src_head->rtp_pkt_size;
+        int rsize = pkt_size[i];
+        int head_size = sizeof(CacheHead);
+        int wsize = rsize - head_size;
+        if(wsize > 0 && wsize == rtp_pkt_size)
+        {
+            //空缺块填0
+            int loss_num = pkt_idx - last_pkt_idx;
+            if(loss_num > 0)
+            {
+                for(int j = 0; j < loss_num; j++)
+                {
+                    ret = fwrite(pnull, 1, wsize, wfp);
+                }
+            }
+            //
+            ret = fwrite(&src_ptr[0], 1, head_size, idxfp);
+            if(ret != head_size)
+            {
+                printf("pkt2file: fail: ret=%d, head_size=%d \n", ret, head_size);
+                ret = -1;
+                break;
+            }
+            ret = fwrite(&src_ptr[head_size], 1, wsize, wfp);
+            if(ret != wsize)
+            {
+                printf("pkt2file: fail: ret=%d, wsize=%d \n", ret, wsize);
+                ret = -2;
+                break;
+            }
+            last_pkt_idx = pkt_idx;
+        }
+        else{
+            printf("pkt2file: fail: rtp_pkt_size=%d, wsize=%d \n", rtp_pkt_size, wsize);
+        }
+        offset += rsize;
+        i++;
+    }
+    p_pkt_idx[0] = last_pkt_idx;
+
+    return ret;
+}
 FQT_API
-void call_test(char *ifilename, char *ofilename)
+void call_test(char *ifilename, char *ofilename, char *idxfilename)
 {
     //文件或文件夹
     FILE *rfp = fopen(ifilename, "rb");
-    FILE *wfp = fopen(ofilename, "wb");
+    FILE *wfp = fopen(ofilename, "r + b");
+    FILE *idxfp = fopen(idxfilename, "wb");
     if(rfp && wfp)
     {
         FileRtpObj rObj = {};
@@ -260,6 +318,7 @@ void call_test(char *ifilename, char *ofilename)
         long long sumsize = 0;
         int status = 0;
         int k = 0;
+        unsigned int pkt_idx = 0;
         //
         rObj.snd_size = 0;
         rObj.seq_no = 0;
@@ -296,12 +355,12 @@ void call_test(char *ifilename, char *ofilename)
                 }
                 //
                 int ret = file_packet(&rObj, out_buf, out_size, rtpSize);
-
                 wObj.data = out_buf;
                 wObj.data_size = ret;//rObj.data_size;
                 ret = file_unpacket(&wObj, out_buf2, out_size2, oSize);
+                //
+                ret = pkt2file(idxfp, wfp, out_buf2, out_size2, oSize, &pkt_idx);
 
-                ///int wsize = fwrite(, 1, wsize, wfp);
             }
             k++;
         }
