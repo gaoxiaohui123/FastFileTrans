@@ -32,6 +32,7 @@
 int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
 {
     int ret = 0;
+    printf("file_packet: start \n");
     FileInfo *info = &obj->info;
     char *data = obj->data;
     int data_size = obj->data_size;
@@ -52,6 +53,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     int offset  = 0;
     int offset2  = 0;
     int i = 0;
+    printf("file_packet: data_size=%d \n", data_size);
     while(offset < data_size)
     {
         int flag = !seq_no && !frame_id && !group_id;
@@ -67,12 +69,12 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
         rtp_hdr->extension	 = 1;//														X
         rtp_hdr->timestamp   = 0;//?
         rtp_hdr->seq_no = obj->seq_no;//(*seq_num);///htons(seq_num ++); //序列号，每发送一个RTP包增1
-        if (obj->seq_no >= MAX_USHORT)
+        if (seq_no >= MAX_USHORT)
         {
-            obj->seq_no = 0;
+            seq_no = 0;
         }
         else{
-            obj->seq_no++;
+            seq_no++;
         }
         if(flag)
         {
@@ -90,7 +92,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             FileInfo *info_data = (FileInfo *)payload_ptr;//&out_buf[offset2 + rtp_header_size + ext_size];
             memcpy((void *)info_data, (void *)info, payload_size);
             //
-            offset2 += rtp_header_size + ext_size + payload_size;
+            offset2 += (int)(rtp_header_size + ext_size + payload_size);
             rtpSize[i] = rtp_header_size + ext_size + payload_size;
         }
         else{
@@ -110,8 +112,8 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             char *src_ptr = (char *)&data[offset];
             memcpy((void *)payload_ptr, (void *)src_ptr, payload_size);
             //
-            offset += payload_size;
-            offset2 += rtp_header_size + ext_size + payload_size;
+            offset += (int)payload_size;
+            offset2 += (int)(rtp_header_size + ext_size + payload_size);
             obj->snd_size += payload_size;
             rtpSize[i] = rtp_header_size + ext_size + payload_size;
             obj->pkt_idx++;
@@ -132,19 +134,22 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             FileInfo *info_data = (FileInfo *)payload_ptr;//&out_buf[offset2 + rtp_header_size + ext_size];
             memcpy((void *)info_data, (void *)info, payload_size);
             //
-            offset2 += rtp_header_size + ext_size + payload_size;
+            offset2 += (int)(rtp_header_size + ext_size + payload_size);
             rtpSize[i] = rtp_header_size + ext_size + payload_size;
         }
         i++;
+        //printf("file_packet: offset=%d, i=%d \n", offset, i);
     }
     obj->frame_id++;
-    //obj->seq_no = 0;
+    obj->seq_no = seq_no;
     ret = offset2;
+    printf("file_packet: ret=%d \n", ret);
     return ret;
 }
 int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
 {
     int ret = 0;
+    printf("file_unpacket: start: \n");
     FileInfo *info = &obj->info;
     char *data = obj->data;
     int data_size = obj->data_size;
@@ -165,6 +170,7 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
     int offset  = 0;
     int offset2  = 0;
     int i = 0;
+    printf("file_unpacket: data_size=%d \n", data_size);
     while(offset < data_size)
     {
         int pkt_size = oSize[i];
@@ -174,7 +180,7 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
         FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&data[offset + rtp_header_size];
         char *payload_ptr = (char *)&data[offset + rtp_header_size + ext_size];
         //
-        int flag = 0;
+        int flag = 1;
         flag &= rtp_hdr->payload     == FILE_PLT;  //负载类型号，									PT
         flag &= rtp_hdr->version     == 2;  //版本号，此版本固定为2								V
         flag &= rtp_hdr->padding	 == 0;//														P
@@ -183,6 +189,8 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
         //rtp_hdr->ssrc        = ssrc;//(unsigned int)svc_nalu;;//htonl(10);    //随机指定为10，并且在本RTP会话中全局唯一	SSRC
         flag &= rtp_hdr->extension	 == 1;//														X
         //rtp_hdr->timestamp   = 0;//?
+        //printf("file_unpacket: rtp_hdr->payload=%d \n", rtp_hdr->payload);
+        //printf("file_unpacket: flag=%d \n", flag);
         if(flag)
         {
             unsigned short seq_no = rtp_hdr->seq_no;
@@ -193,7 +201,8 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
             unsigned short extlen = (rtp_extend_length + 1) << 2;
             unsigned short rtp_pkt_size = rtp_ext->rtp_pkt_size;
             unsigned short this_pkt_size = rtp_pkt_size + extlen + rtp_header_size;
-            if(this_pkt_size == pkt_size && extlen == (ext_size + 4))
+            //printf("file_unpacket: this_pkt_size=%d, pkt_size=%d, extlen=%d, ext_size=%d \n", this_pkt_size, pkt_size, extlen, ext_size);
+            if(this_pkt_size == pkt_size && extlen == ext_size)
             {
                 char *dst_ptr = (char *)&out_buf[offset2];
                 CacheHead *dst_head = (CacheHead *)dst_ptr;
@@ -207,18 +216,22 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
                 dst_head->group_id = rtp_ext->group_id;
                 dst_head->pkt_idx = rtp_ext->pkt_idx;
                 //
-                offset2 += dst_pkt_size;
+                offset2 += (int)dst_pkt_size;
                 oSize[i] = rtp_ext->rtp_pkt_size + sizeof(CacheHead);
+                //printf("file_unpacket: offset2=%d, i=%d \n", offset2, i);
             }
         }
         offset += pkt_size;
         i++;
+        //printf("file_unpacket: offset=%d, i=%d \n", offset, i);
     }
     ret = offset2;
+    printf("file_unpacket: ret=%d \n", ret);
     return ret;
 }
 int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, short *pkt_size, int size, unsigned int *p_pkt_idx)
 {
+    printf("pkt2file: start: \n");
     int ret = 0;
     int offset = 0;
     int offset2 = 0;
@@ -234,6 +247,7 @@ int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, short *pkt_size, int size, u
         int rsize = pkt_size[i];
         int head_size = sizeof(CacheHead);
         int wsize = rsize - head_size;
+        printf("pkt2file: rsize=%d, pkt_idx=%d \n", rsize, pkt_idx);
         if(wsize > 0 && wsize == rtp_pkt_size)
         {
             //空缺块填0
@@ -267,9 +281,10 @@ int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, short *pkt_size, int size, u
         }
         offset += rsize;
         i++;
+        printf("pkt2file: offset=%d, i=%d \n", offset, i);
     }
     p_pkt_idx[0] = last_pkt_idx;
-
+    printf("pkt2file: ret=%d \n", ret);
     return ret;
 }
 FQT_API
@@ -277,15 +292,24 @@ void call_test(char *ifilename, char *ofilename, char *idxfilename)
 {
     //文件或文件夹
     FILE *rfp = fopen(ifilename, "rb");
-    FILE *wfp = fopen(ofilename, "r + b");
-    FILE *idxfp = fopen(idxfilename, "wb");
-    if(rfp && wfp)
+    FILE *wfp = fopen(ofilename, "wb+");
+    FILE *idxfp = fopen(idxfilename, "wb+");
+    printf("call_test: ifilename=%s \n", ifilename);
+    printf("call_test: ofilename=%s \n", ofilename);
+    printf("call_test: idxfilename=%s \n", idxfilename);
+    printf("call_test: rfp=%x \n", rfp);
+    printf("call_test: wfp=%x \n", wfp);
+    printf("call_test: idxfp=%x \n", idxfp);
+    if(rfp && wfp && idxfp)
     {
+        printf("call_test: start 2 \n");
+        //return;
         FileRtpObj rObj = {};
         FileRtpObj wObj = {};
         //
         fseek(rfp, 0, SEEK_END);
         long long total_size = ftell(rfp);
+        printf("call_test: total_size=%d \n", total_size);
         rewind(rfp);
         //
         int mtu_size = 1100;
@@ -310,7 +334,7 @@ void call_test(char *ifilename, char *ofilename, char *idxfilename)
 
         int out_size2 = (frame_blks * (mtu_size + 100));
         char *out_buf2 = calloc(1, out_size);
-        short *oSize =rtpSize;// calloc(1, (frame_blks + 1) * sizeof(short));
+        short *oSize = rtpSize;// calloc(1, (frame_blks + 1) * sizeof(short));
 
         rObj.info.file_xorcode = 0;      //文件异或码（文件首个64MBytes）
         strcpy(rObj.info.filename, ifilename);    //去除路径的文件名
@@ -326,12 +350,15 @@ void call_test(char *ifilename, char *ofilename, char *idxfilename)
         rObj.enable_encrypt = 0;
         rObj.enable_fec = 0;
         //
+        printf("call_test: total_size=%d \n", total_size);
+        //
         while((sumsize < total_size) && !status)
         {
             //group: 256 * 256 * 1100
             rObj.frame_id = 0;
             for(int i = 0; i < rObj.info.group_size; i++)
             {
+                printf("call_test: rObj.info.group_size=%d, i=%d \n", rObj.info.group_size, i);
                 if(status)
                 {
                     break;
@@ -344,7 +371,9 @@ void call_test(char *ifilename, char *ofilename, char *idxfilename)
                 //
                 for(int j = 0; j < rObj.info.frame_size; j++)
                 {
+                    printf("call_test: rObj.info.frame_size=%d \n", rObj.info.frame_size);
                     int rsize = fread(&ptr[offset], 1, mtu_size, rfp);
+                    printf("call_test: rsize=%d, j=%d \n", rsize, j);
                     if(rsize < 0)
                     {
                         status = 1;
@@ -355,18 +384,30 @@ void call_test(char *ifilename, char *ofilename, char *idxfilename)
                 }
                 //
                 int ret = file_packet(&rObj, out_buf, out_size, rtpSize);
+                printf("call_test: file_packet: ret=%d \n", ret);
                 wObj.data = out_buf;
                 wObj.data_size = ret;//rObj.data_size;
                 ret = file_unpacket(&wObj, out_buf2, out_size2, oSize);
+                printf("call_test: file_unpacket: ret=%d \n", ret);
                 //
                 ret = pkt2file(idxfp, wfp, out_buf2, out_size2, oSize, &pkt_idx);
-
+                printf("call_test: pkt2file: ret=%d \n", ret);
             }
             k++;
+            printf("call_test: sumsize=%d, status=%d, k=%d \n", sumsize, status, k);
         }
-
-        //
+    }
+    if(rfp)
+    {
         fclose(rfp);
+    }
+    if(wfp)
+    {
         fclose(wfp);
     }
+    if(idxfp)
+    {
+        fclose(idxfp);
+    }
+
 }

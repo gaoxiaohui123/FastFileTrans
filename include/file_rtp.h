@@ -30,7 +30,7 @@ EXTERNC {
 #include <string.h>
 #include <math.h>
 
-#define FILE_PLT 130
+#define FILE_PLT 127
 #define FIX_MTU_SIZE 1400
 #define MTU_SIZE 1100
 #define RAW_OFFSET 4//2
@@ -139,7 +139,7 @@ typedef struct {
     unsigned int data_type : 3;         //1:file start info;2:file end info; 0:raw data
     unsigned int enable_encrypt : 1;    //是否加密
     unsigned int enable_fec : 1;         //是否开启fec
-    unsigned int frame_id : 8;
+    unsigned int frame_id : 16;
     unsigned int group_id : 16;
     unsigned int pkt_idx;
     unsigned int rtp_xorcode;           //当前数据块（包括rtp头）异或码
@@ -147,7 +147,7 @@ typedef struct {
 typedef struct{
     unsigned long long filesize;    //文件大小（maxsize = 4T?）
     unsigned int block_size : 16;   //mtu size, 默认1100bytes
-    unsigned int frame_size : 8;    //default: 256
+    unsigned int frame_size : 16;    //default: 256
     unsigned int group_size : 16;    //default: 64MB
     unsigned int block_num;         //block 个数 = filesize / block_size
     unsigned int frame_num;
@@ -160,7 +160,7 @@ typedef struct{
     unsigned int rtp_pkt_size : 16;     //当前rtp包大小
     unsigned int data_type : 3;         //1:file start info;2:file end info; 0:raw data
     unsigned int enable_encrypt : 1;    //是否加密
-    unsigned int frame_id : 8;
+    unsigned int frame_id : 16;
     unsigned int group_id : 16;
     unsigned int pkt_idx;
 }CacheHead;
