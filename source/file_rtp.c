@@ -242,7 +242,7 @@ int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, short *pkt_size, int size, u
             {
                 for(int j = 0; j < loss_num; j++)
                 {
-                    ret = fwrite(pnull, 1, wsize, wfp);
+                    ret = fwrite(pnull, 1, wsize, fp);
                 }
             }
             //
@@ -253,7 +253,7 @@ int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, short *pkt_size, int size, u
                 ret = -1;
                 break;
             }
-            ret = fwrite(&src_ptr[head_size], 1, wsize, wfp);
+            ret = fwrite(&src_ptr[head_size], 1, wsize, fp);
             if(ret != wsize)
             {
                 printf("pkt2file: fail: ret=%d, wsize=%d \n", ret, wsize);
