@@ -102,8 +102,12 @@ def TestLocal():
     ret = gload.lib.call_test(ifilename.encode('utf-8'), ofilename.encode('utf-8'), idxfilename.encode('utf-8'))
     end_time = time.time()
     difftime = int((end_time - start_time) * 1000)
-    print("TestLocal: difftime(ms)= ", difftime)
+    #print("TestLocal: difftime(ms)= ", difftime)
     print('TestLocal: difftime={}(ms)'.format(difftime))
+    avg = (ret * 1000) / difftime
+    print('TestLocal: difftime={:.3f}(MB/s)'.format(avg))
+    avg2 = (ret * 1000 * 8) / (difftime * 1024)
+    print('TestLocal: difftime={:.3f}(Gbps)'.format(avg2))
 if __name__ == '__main__':
     print('Start pycall.')
     TestLocal()

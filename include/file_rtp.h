@@ -160,6 +160,7 @@ typedef struct{
     unsigned int rtp_pkt_size : 16;     //当前rtp包大小
     unsigned int data_type : 3;         //1:file start info;2:file end info; 0:raw data
     unsigned int enable_encrypt : 1;    //是否加密
+    unsigned int data_size : 10;        //当前索引数据块大小
     unsigned int frame_id : 16;
     unsigned int group_id : 16;
     unsigned int pkt_idx;

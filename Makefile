@@ -10,6 +10,7 @@ SRC_ROOT = $(PWD)/
 
 # 1、准备工作，编译方式、目标文件名、依赖库路径的定义。
 # 目标文件名
+DLL = ./libqft.so
 TARGET = ./libqft.a
 CC = gcc  
 CPP = g++
@@ -138,10 +139,11 @@ $(TARGET) : $(COBJS) #$(CPPOBJS)
 #清除所有目标文件以及生成的最终目标文件  
 clean:              
 	#rm $(TARGET) $(COBJS) $(CPPOBJS)
-	rm $(TARGET) $(COBJS)
+	rm $(TARGET) $(COBJS) $(DLL)
 #rm *.d  
 cleanall:  
 	#rm $(CDEF) $(CPPDEF)  
 	#rm  $(COBJS) $(CPPOBJS)
 	rm  $(COBJS)
-	#$(TARGET)
+	rm $(TARGET)
+	rm $(DLL)
