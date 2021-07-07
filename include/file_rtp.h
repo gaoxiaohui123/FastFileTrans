@@ -143,6 +143,8 @@ typedef struct {
     unsigned int group_id : 16;
     unsigned int pkt_idx;
     unsigned int rtp_xorcode;           //当前数据块（包括rtp头）异或码
+    unsigned int time_stamp0;
+    unsigned int time_stamp1;
 } FILE_EXTEND_HEADER;
 typedef struct{
     unsigned long long filesize;    //文件大小（maxsize = 4T?）
@@ -165,6 +167,26 @@ typedef struct{
     unsigned int group_id : 16;
     unsigned int pkt_idx;
 }CacheHead;
+
+struct FileInfo {
+    //void *sock;//
+    int num;
+    int id;
+    struct FileInfo *tail;
+    struct FileInfo *next;
+};
+typedef struct FileInfo FileNode;
+
+struct GroupInfo {
+    //void *sock;//
+    int num;
+    int id;
+    FileNode *head;
+    struct GroupInfo *tail;
+    struct GroupInfo *next;
+};
+typedef struct GroupInfo GroupNode;
+
 typedef struct{
     FileInfo info;
     char *data;
@@ -177,12 +199,15 @@ typedef struct{
     unsigned int enable_fec;         //是否开启fec
     unsigned long long snd_size;
     unsigned int pkt_idx;//4*1024*1024*1024*1024;//4T
+    long long now_time;
+    long long start_time;
+    int net_time;
+    GroupNode *head;
     FILE *index_fp;
     FILE *raw_fp;
 }FileRtpObj;
 
-#define MAX_RTP_EXTEND_SIZE (sizeof(EXTEND_HEADER) + sizeof(NACK_HEADER) + sizeof(FEC_HEADER))
-#define MAX_RTP_HEAD_SIZE (sizeof(RTP_FIXED_HEADER) + sizeof(EXTEND_HEADER))
+
 
 
 

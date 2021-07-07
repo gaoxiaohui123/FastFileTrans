@@ -16,6 +16,8 @@ case $Num in
   -Wno-pointer-to-int-cast \
   -Wno-discarded-qualifiers \
   ./source/file_rtp.c \
+  ./source/file_list.c \
+  ./source/file_group.c \
   -I./include/ \
   -L./ \
   -L/usr/local/lib \

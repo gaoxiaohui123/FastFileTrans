@@ -29,6 +29,48 @@
 
 #include "file_rtp.h"
 
+#if 1
+#ifdef _WIN32
+#include <time.h>
+#include <windows.h>
+int64_t get_sys_time()
+{
+	struct timeval tBegin;
+	//struct timeval tEnd;
+	gettimeofday(&tBegin, NULL);
+	//...process
+	//gettimeofday(&tEnd, NULL);
+	//long deltaTime = 1000000L * (tEnd.tv_sec - tBegin.tv_sec) + (tEnd.tv_usec - tBegin.tv_usec);
+	long long time = (1000000L * (long long)tBegin.tv_sec + tBegin.tv_usec) / 1000;//us-->ms
+    return time;
+}
+#else
+#include <sys/time.h>
+int64_t get_sys_time()
+{
+	struct timeval tBegin;
+	//struct timeval tEnd;
+	gettimeofday(&tBegin, NULL);
+	//...process
+	//gettimeofday(&tEnd, NULL);
+	//long deltaTime = 1000000L * (tEnd.tv_sec - tBegin.tv_sec) + (tEnd.tv_usec - tBegin.tv_usec);
+	long long time = (1000000L * tBegin.tv_sec + tBegin.tv_usec) / 1000;//us-->ms
+    return time;
+}
+#endif
+FQT_API
+long long api_get_sys_time(int delay)
+{
+    long long ret = get_sys_time();
+    if(delay)
+    {
+        ret += delay;
+    }
+    return ret;
+}
+
+#endif
+
 int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
 {
     int ret = 0;
@@ -54,6 +96,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     int offset2  = 0;
     int i = 0;
     //printf("file_packet: data_size=%d \n", data_size);
+    long long now_time = api_get_sys_time(0);
     while(offset < data_size)
     {
         int flag = !seq_no && !frame_id && !group_id;
@@ -89,6 +132,8 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             rtp_ext->frame_id = obj->frame_id;
             rtp_ext->group_id = obj->group_id;
             rtp_ext->pkt_idx = obj->pkt_idx;
+			rtp_ext->time_stamp0 = now_time & 0xFFFFFFFF;
+			rtp_ext->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
             rtp_ext->rtp_xorcode = 0;
             //obj->pkt_idx++;
             //
@@ -111,6 +156,8 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             rtp_ext->frame_id = obj->frame_id;
             rtp_ext->group_id = obj->group_id;
             rtp_ext->pkt_idx = obj->pkt_idx;
+			rtp_ext->time_stamp0 = now_time & 0xFFFFFFFF;
+			rtp_ext->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
             rtp_ext->rtp_xorcode = 0;
             //
             char *src_ptr = (char *)&data[offset];
@@ -156,6 +203,8 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             rtp_ext->group_id = obj->group_id;
             rtp_ext->pkt_idx = obj->pkt_idx - 1;
             rtp_ext->pkt_idx = obj->pkt_idx;//test
+			rtp_ext->time_stamp0 = now_time & 0xFFFFFFFF;
+			rtp_ext->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
             rtp_ext->rtp_xorcode = 0;
             //
             FileInfo *info_data = (FileInfo *)payload_ptr;//&out_buf[offset2 + rtp_header_size + ext_size];
@@ -198,6 +247,7 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
     int offset  = 0;
     int offset2  = 0;
     int i = 0;
+    long long now_time = api_get_sys_time(0);
     //printf("file_unpacket: data_size=%d \n", data_size);
     while(offset < data_size)
     {
@@ -232,6 +282,15 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
             //printf("file_unpacket: this_pkt_size=%d, pkt_size=%d, extlen=%d, ext_size=%d \n", this_pkt_size, pkt_size, extlen, ext_size);
             if(this_pkt_size == pkt_size && extlen == ext_size)
             {
+                long long time_stamp0 = rtp_ext->time_stamp0;
+	            long long time_stamp1 = rtp_ext->time_stamp1;
+	            long long packet_time_stamp = time_stamp0 | (time_stamp1 << 32);
+	            if(!obj->net_time)
+	            {
+	                //与对端进行时间对准
+	                obj->net_time = now_time - packet_time_stamp;
+	            }
+
                 char *dst_ptr = (char *)&out_buf[offset2];
                 CacheHead *dst_head = (CacheHead *)dst_ptr;
                 char *dst_payload = (char *)&dst_ptr[sizeof(CacheHead)];
