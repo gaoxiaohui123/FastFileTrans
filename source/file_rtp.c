@@ -606,6 +606,14 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
             printf("call_test: total_size3=%lld \n", total_size3);
             rewind(wfp2);
             //
+            char *file_data = malloc(total_size3);
+            int rsize = fread(file_data, 1, total_size3, wfp2);
+            if(rsize != total_size3)
+            {
+                printf("fail: call_test: rsize=%d \n", rsize);
+            }
+            rewind(wfp2);
+            //
             sumsize2 = 0;
             int i = 0;
             int data_size = 1100;
@@ -628,10 +636,10 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
                 {
                     printf("call_test: rsize=%d \n", rsize);
                     //
-                    for(int j = 0; j < 1000; j++)
+                    for(int j = 0; j < 1; j++)
                     {
-                        int wsize = fwrite(ptr, 1, data_size, wfp2);
-                        if(wsize != data_size)
+                        int wsize = fwrite(file_data, 1, total_size3, wfp2);
+                        if(wsize != total_size3)
                         {
                             printf("call_test: wsize=%d \n", wsize);
                             break;
