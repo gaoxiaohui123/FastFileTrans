@@ -96,9 +96,9 @@ gload = LoadLib()
 
 def TestLocal():
     start_time = time.time()
-    ifilename = '/home/gxh/works/datashare/foreman_cif.yuv'
-    ofilename = '/home/gxh/works/foreman_cif.yuv'
-    idxfilename = '/home/gxh/works/foreman_cif.idx'
+    ifilename = '/home/gxh/works/datashare/InToTree_1920x1080.yuv'
+    ofilename = '/home/gxh/works/InToTree_1920x1080.yuv'
+    idxfilename = '/home/gxh/works/InToTree_1920x1080.idx'
     ret = gload.lib.call_test(ifilename.encode('utf-8'), ofilename.encode('utf-8'), idxfilename.encode('utf-8'))
     end_time = time.time()
     difftime = int((end_time - start_time) * 1000)
