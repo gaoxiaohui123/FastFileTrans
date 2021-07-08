@@ -231,6 +231,7 @@ typedef struct{
     int net_time;
     GroupNode *head;
     FrameNode *frameNode;
+    PicNode *picNode;
     FILE *index_fp;
     FILE *raw_fp;
 }FileRtpObj;

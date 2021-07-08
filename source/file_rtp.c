@@ -511,7 +511,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         //
         rObj.info.frame_num = (total_size / frame_size) + ((total_size % frame_size) != 0);
 
-        int pic_blks = 256;//12;
+        int pic_blks = 12;//256;//12;
         rObj.info.pic_size = pic_blks;
         int pic_size = pic_blks * frame_size;
         //
@@ -524,7 +524,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         //
         rObj.info.pic_num = (total_size / pic_size) + ((total_size % pic_size) != 0);
 
-        int group_blks = 12;//256;
+        int group_blks = 256;
         rObj.info.group_size = group_blks;
         int group_size = group_blks * pic_size;
         rObj.info.group_num = (total_size / pic_size) + ((total_size % pic_size) != 0);
@@ -555,6 +555,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         rObj.pkt_idx = 0;
         rObj.enable_encrypt = 0;
         rObj.enable_fec = 0;
+        rObj.picNode = NULL;
+        //pic_create_node(&rObj.picNode);
         //
         printf("call_test: total_size=%d \n", total_size);
         //
@@ -564,6 +566,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
             //rObj.group_id = 0;
             GroupNode *groupNode = (GroupNode *)calloc(1, sizeof(GroupNode));
             pic_create_node(&groupNode->head);
+            //groupNode->head = rObj.picNode;
             for(int i = 0; i < rObj.info.group_size; i++)
             {
                 MYPRINT("call_test: rObj.info.group_size=%d, i=%d \n", rObj.info.group_size, i);

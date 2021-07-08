@@ -37,10 +37,11 @@ void pic_add_node(PicNode *head, PicNode **pnew)
         frame_create_node(&((*pnew)->head));
     }
     //PicNode *head = head0;//obj->broadCastHead;
-    if(head->num > 100)
+    if(head->num > 50)
     {
         MYPRINT2("pic_add_node: head->num=%d \n", head->num);
         pic_delete_node(head);
+        head->num--;
     }
     (*pnew)->next = NULL;   //新节点指针域置NULL
     head->tail->next = *pnew;  //新节点插入到表尾
