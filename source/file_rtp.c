@@ -267,7 +267,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
         }
         //printf("file_packet: offset=%d, i=%d \n", offset, i);
     }
-    obj->frame_id++;
+    //obj->frame_id++;
     obj->seq_no = seq_no;
     ret = offset2;
     MYPRINT("file_packet: ret=%d \n", ret);
@@ -624,6 +624,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                         printf("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
                     }
                     frame_add_node(picNode->head, &frameNode);
+                    obj->frame_id++;
                     if(sumsize >= total_size)
                     {
                         printf("call_test: sumsize=%lld, total_size=%lld ######## \n", sumsize, total_size);
