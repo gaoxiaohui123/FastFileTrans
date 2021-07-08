@@ -3,7 +3,7 @@
 
 
 
-void file_create_node(FileNode **head0)
+int file_create_node(FileNode **head0)
 {
     FileNode *head = *head0;
     if(!head)
@@ -16,18 +16,26 @@ void file_create_node(FileNode **head0)
         head->tail = head;  // 开始时尾指针指向头节点
         *head0 = head;
     }
+    else{
+        return -1;
+    }
+    return 0;
 }
 
-void file_add_node(FileNode *head0, FileNode *pnew)
+void file_add_node(FileNode *head0, FileNode **pnew)
 {
+    if(!(*pnew))
+    {
+        (*pnew) = calloc(1, sizeof(FileNode));
+    }
     FileNode *head = head0;//obj->broadCastHead;
-    pnew->next = NULL;   //新节点指针域置NULL
-    head->tail->next = pnew;  //新节点插入到表尾
-    head->tail = pnew;   //为指针指向当前的尾节点
+    (*pnew)->next = NULL;   //新节点指针域置NULL
+    head->tail->next = *pnew;  //新节点插入到表尾
+    head->tail = *pnew;   //为指针指向当前的尾节点
     head->id++;
     head->num++;
-    pnew->id = head->id;
-    MYPRINT2("file_add_node: head->num=%d, pnew->id=%d \n", head->num, pnew->id);
+    (*pnew)->id = head->id;
+    MYPRINT2("file_add_node: head->num=%d, (*pnew)->id=%d \n", head->num, (*pnew)->id);
 
 }
 void *file_find_node(FileNode *head)
@@ -127,7 +135,8 @@ void file_delete_node(FileNode *head)
     return;
 }
 
-void file_free_node(FileNode *head) {
+void file_free_node(FileNode *head)
+{
     FileNode *p,*q;
     if(!head)
     {

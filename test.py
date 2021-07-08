@@ -97,13 +97,16 @@ gload = LoadLib()
 def TestLocal():
     start_time = time.time()
     ifilename = '/home/gxh/works/datashare/InToTree_1920x1080.yuv'
+    ifilename = '/home/gxh/works/InToTree_1920x1080_0.yuv'
     ofilename = '/home/gxh/works/InToTree_1920x1080.yuv'
     idxfilename = '/home/gxh/works/InToTree_1920x1080.idx'
     ret = gload.lib.call_test(ifilename.encode('utf-8'), ofilename.encode('utf-8'), idxfilename.encode('utf-8'))
     end_time = time.time()
     difftime = int((end_time - start_time) * 1000)
+    t0 = difftime / 1000
+    t1 = difftime % 1000
     #print("TestLocal: difftime(ms)= ", difftime)
-    print('TestLocal: difftime={}(ms)'.format(difftime))
+    print('TestLocal: difftime={}(s){}(ms)'.format(t0, t1))
     avg = (ret * 1000) / difftime
     print('TestLocal: difftime={:.3f}(MB/s)'.format(avg))
     avg2 = (ret * 1000 * 8) / (difftime * 1024)

@@ -29,6 +29,13 @@
 
 #include "file_rtp.h"
 
+extern int group_create_node(GroupNode **head0);
+extern void group_add_node(GroupNode *head0, GroupNode **pnew);
+extern void *group_find_node(GroupNode *head);
+extern void group_delete_node(GroupNode *head);
+extern void group_free_node(GroupNode *head);
+
+
 #if 1
 #ifdef _WIN32
 #include <time.h>
@@ -74,7 +81,7 @@ long long api_get_sys_time(int delay)
 int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
 {
     int ret = 0;
-    printf("file_packet: start \n");
+    MYPRINT("file_packet: start \n");
     FileInfo *info = &obj->info;
     char *data = obj->data;
     int data_size = obj->data_size;
@@ -220,13 +227,13 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     obj->frame_id++;
     obj->seq_no = seq_no;
     ret = offset2;
-    printf("file_packet: ret=%d \n", ret);
+    MYPRINT("file_packet: ret=%d \n", ret);
     return ret;
 }
 int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
 {
     int ret = 0;
-    printf("file_unpacket: start: \n");
+    MYPRINT("file_unpacket: start: \n");
     FileInfo *info = &obj->info;
     char *data = obj->data;
     int data_size = obj->data_size;
@@ -313,12 +320,12 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
         //printf("file_unpacket: offset=%d, i=%d \n", offset, i);
     }
     ret = offset2;
-    printf("file_unpacket: ret=%d \n", ret);
+    MYPRINT("file_unpacket: ret=%d \n", ret);
     return ret;
 }
 int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, int size, short *pkt_size, unsigned int *p_pkt_idx)
 {
-    printf("pkt2file: start: \n");
+    MYPRINT("pkt2file: start: \n");
     int ret = 0;
     int offset = 0;
     int offset2 = 0;
@@ -367,6 +374,7 @@ int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, int size, short *pkt_size, u
                 ret = -1;
                 break;
             }
+            //fflush(idxfp);
 #if 1
             if(!data_type)
             {
@@ -377,6 +385,7 @@ int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, int size, short *pkt_size, u
                     ret = -2;
                     break;
                 }
+                //fflush(fp);
                 sum += ret;
             }
 
@@ -392,7 +401,9 @@ int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, int size, short *pkt_size, u
     }
     p_pkt_idx[0] = last_pkt_idx;
     ret = sum;
-    printf("pkt2file: ret=%d \n", ret);
+    //fflush(idxfp);
+    //fflush(fp);
+    MYPRINT("pkt2file: ret=%d \n", ret);
     return ret;
 }
 //./ffplay -f rawvideo -video_size $WXH2 $OUT_FILE
@@ -400,19 +411,23 @@ FQT_API
 int call_test(char *ifilename, char *ofilename, char *idxfilename)
 {
     int ret = 0;
+    char ofilename2[256] = "";
+    strcpy(ofilename2, ofilename);
+    strcat(ofilename2, ".tmp");
+
     //文件或文件夹
     FILE *rfp = fopen(ifilename, "rb");
     //
-    FILE *wfp = fopen(ofilename, "wb+");
+    FILE *wfp = fopen(ofilename2, "wb+");
     if(wfp)
     {
         fclose(wfp);
     }
-    wfp = fopen(ofilename, "r+b+");
+    wfp = fopen(ofilename2, "r+b+");
     //
     FILE *idxfp = fopen(idxfilename, "wb+");
     printf("call_test: ifilename=%s \n", ifilename);
-    printf("call_test: ofilename=%s \n", ofilename);
+    printf("call_test: ofilename2=%s \n", ofilename2);
     printf("call_test: idxfilename=%s \n", idxfilename);
     printf("call_test: rfp=%x \n", rfp);
     printf("call_test: wfp=%x \n", wfp);
@@ -423,6 +438,9 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
         //return;
         FileRtpObj rObj = {};
         FileRtpObj wObj = {};
+        //
+        group_create_node(&rObj.head);
+        group_create_node(&wObj.head);
         //
         fseek(rfp, 0, SEEK_END);
         long long total_size = ftell(rfp);
@@ -473,18 +491,28 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
         //
         while((sumsize < total_size) && !status)
         {
-            //group: 256 * 256 * 1100
+            //group: 256 * 256 * 1100 > 64MB
             rObj.frame_id = 0;
             for(int i = 0; i < rObj.info.group_size; i++)
             {
-                printf("call_test: rObj.info.group_size=%d, i=%d \n", rObj.info.group_size, i);
+                MYPRINT("call_test: rObj.info.group_size=%d, i=%d \n", rObj.info.group_size, i);
                 if(status)
                 {
                     break;
                 }
                 int offset = 0;
                 char *ptr = rObj.data;
-
+                long long time0 = api_get_sys_time(0);
+#if 1
+                int rsize = fread(&ptr[offset], 1, mtu_size * rObj.info.frame_size, rfp);
+                if(rsize != (mtu_size * rObj.info.frame_size))
+                {
+                    printf("call_test: rsize=%d, ######## \n", rsize);
+                    status = 1;
+                }
+                sumsize += rsize;
+                offset += rsize;
+#else
                 for(int j = 0; j < rObj.info.frame_size; j++)
                 {
                     if(sumsize >= total_size)
@@ -507,6 +535,11 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
                     sumsize += rsize;
                     offset += rsize;
                 }
+#endif
+                long long time1 = api_get_sys_time(0);
+                int difftime = (int)(time1 - time0);
+                if(difftime > 10)
+                    MYPRINT("call_test: read: difftime=%d (ms) \n", difftime);
                 //
                 rObj.data_size = offset;//frame_size;
                 rObj.data_xorcode = 0;
@@ -518,7 +551,12 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
                 ret = file_unpacket(&wObj, out_buf2, out_size2, oSize);
                 //printf("call_test: file_unpacket: ret=%d \n", ret);
                 //
+                time0 = api_get_sys_time(0);
                 ret = pkt2file(idxfp, wfp, out_buf2, ret, oSize, &pkt_idx);
+                time1 = api_get_sys_time(0);
+                difftime = (int)(time1 - time0);
+                if(difftime > 10)
+                    MYPRINT("call_test: write: difftime=%d (ms) \n", difftime);
                 sumsize2 += ret;
                 //printf("call_test: pkt2file: ret=%d \n", ret);
                 if(sumsize != sumsize2)
@@ -591,14 +629,14 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
         }
 #endif
 
-#if 1
+#if 0
         //验证文件改写
         if(wfp)
         {
             fclose(wfp);
             wfp = NULL;
         }
-        FILE *wfp2 = fopen(ofilename, "r+b+");
+        FILE *wfp2 = fopen(ofilename2, "r+b+");
         if(wfp2)
         {
             fseek(wfp2, 0, SEEK_END);//SEEK_SET//SEEK_CUR
@@ -636,7 +674,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
                 {
                     printf("call_test: rsize=%d \n", rsize);
                     //
-                    for(int j = 0; j < 1; j++)
+                    for(int j = 0; j < 100; j++)
                     {
                         int wsize = fwrite(file_data, 1, total_size3, wfp2);
                         if(wsize != total_size3)
@@ -644,6 +682,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
                             printf("call_test: wsize=%d \n", wsize);
                             break;
                         }
+                        printf("call_test: j=%d \n", j);
                     }
 
                     //
@@ -676,6 +715,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
         {
             free(out_buf2);
         }
+        int ret2 = rename(ofilename2, ofilename);
+        printf("call_test: rename: ret2=%d \n", ret2);
         printf("call_test: end free \n");
     }
     printf("call_test: close rfp \n");

@@ -1,9 +1,13 @@
 
 #include "file_rtp.h"
 
+extern int file_create_node(FileNode **head0);
+extern void file_add_node(FileNode *head0, FileNode **pnew);
+extern void *file_find_node(FileNode *head);
+extern void file_delete_node(FileNode *head);
+extern void file_free_node(FileNode *head);
 
-
-void group_create_node(GroupNode **head0)
+int group_create_node(GroupNode **head0)
 {
     GroupNode *head = *head0;
     if(!head)
@@ -12,22 +16,32 @@ void group_create_node(GroupNode **head0)
         head = (GroupNode *)calloc(1, sizeof(GroupNode));  //创建头节点。
         head->num = 0;
         head->id = 0;
+        //file_create_node(&head->head);
         head->next = NULL;  //头节点指针域置NULL
         head->tail = head;  // 开始时尾指针指向头节点
         *head0 = head;
     }
+    else{
+        return -1;
+    }
+    return 0;
 }
 
-void group_add_node(GroupNode *head0, GroupNode *pnew)
+void group_add_node(GroupNode *head0, GroupNode **pnew)
 {
+    if(!(*pnew))
+    {
+        (*pnew) = calloc(1, sizeof(GroupNode));
+        file_create_node((*pnew)->head);
+    }
     GroupNode *head = head0;//obj->broadCastHead;
-    pnew->next = NULL;   //新节点指针域置NULL
-    head->tail->next = pnew;  //新节点插入到表尾
-    head->tail = pnew;   //为指针指向当前的尾节点
+    (*pnew)->next = NULL;   //新节点指针域置NULL
+    head->tail->next = *pnew;  //新节点插入到表尾
+    head->tail = *pnew;   //为指针指向当前的尾节点
     head->id++;
     head->num++;
-    pnew->id = head->id;
-    MYPRINT2("group_add_node: head->num=%d, pnew->id=%d \n", head->num, pnew->id);
+    (*pnew)->id = head->id;
+    MYPRINT2("group_add_node: head->num=%d, (*pnew)->id=%d \n", head->num, (*pnew)->id);
 
 }
 void *group_find_node(GroupNode *head)
@@ -114,6 +128,7 @@ void group_delete_node(GroupNode *head)
             head->tail->next = q;
             head->tail = q;
         }
+        file_delete_node(ret->head);
         free(ret);
         head->num--;
         MYPRINT2("group_delete_node: head->num=%d \n", head->num);
@@ -137,6 +152,7 @@ void group_free_node(GroupNode *head) {
     while (p->next != NULL) {
         q = p->next;
         p->next = q->next;
+        file_free_node(q->head);
         free(q);
     }
     //free(p);

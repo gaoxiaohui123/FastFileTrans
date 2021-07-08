@@ -29,6 +29,7 @@ EXTERNC {
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <fcntl.h>
 
 #define FILE_PLT 127
 #define FIX_MTU_SIZE 1400
