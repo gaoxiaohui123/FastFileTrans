@@ -122,6 +122,10 @@ void file_delete_node(FileNode *head)
             head->tail->next = q;
             head->tail = q;
         }
+        if(ret->data)
+        {
+            free(ret->data);
+        }
         free(ret);
         head->num--;
         MYPRINT2("file_delete_node: head->num=%d \n", head->num);
@@ -146,6 +150,10 @@ void file_free_node(FileNode *head)
     while (p->next != NULL) {
         q = p->next;
         p->next = q->next;
+        if(q->data)
+        {
+            free(q->data);
+        }
         free(q);
     }
     //free(p);

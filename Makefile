@@ -34,6 +34,8 @@ INCS += $(DEFINC)
 #maintest.c tree/rbtree.c  多了子目录，那就直接添加 目录/*.c即可   所有的源文件--  .c文件列表  
 CSRCS = $(wildcard $(SRC_ROOT)/source/file_rtp.c \
 $(SRC_ROOT)/source/file_list.c \
+$(SRC_ROOT)/source/file_frame.c \
+$(SRC_ROOT)/source/file_pic.c \
 $(SRC_ROOT)/source/file_group.c)
 
 CPPSRCS =

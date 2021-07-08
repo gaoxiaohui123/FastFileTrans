@@ -17,6 +17,8 @@ case $Num in
   -Wno-discarded-qualifiers \
   ./source/file_rtp.c \
   ./source/file_list.c \
+  ./source/file_frame.c \
+  ./source/file_pic.c \
   ./source/file_group.c \
   -I./include/ \
   -L./ \

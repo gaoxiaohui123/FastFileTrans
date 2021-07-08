@@ -31,9 +31,29 @@
 
 extern int group_create_node(GroupNode **head0);
 extern void group_add_node(GroupNode *head0, GroupNode **pnew);
+extern void *group_find_node_by_id(GroupNode *head, int id);
+extern void group_delete_node_by_id(GroupNode *head, int id);
+extern void group_free_node(GroupNode *head);
 extern void *group_find_node(GroupNode *head);
 extern void group_delete_node(GroupNode *head);
-extern void group_free_node(GroupNode *head);
+
+extern int pic_create_node(PicNode **head0);
+extern void pic_add_node(PicNode *head0, PicNode **pnew);
+extern void *pic_find_node_by_id(PicNode *head, int id);
+extern void pic_delete_node_by_id(PicNode *head, int id);
+extern void pic_free_node(PicNode *head);
+
+extern int frame_create_node(FrameNode **head0);
+extern void frame_add_node(FrameNode *head0, FrameNode **pnew);
+extern void *frame_find_node_by_id(FrameNode *head, int id);
+extern void frame_delete_node_by_id(FrameNode *head, int id);
+extern void frame_free_node(FrameNode *head);
+
+extern int file_create_node(FileNode **head0);
+extern void file_add_node(FileNode *head0, FileNode **pnew);
+extern void *file_find_node_by_id(FileNode *head, int id);
+extern void file_delete_node_by_id(FileNode *head, int id);
+extern void file_free_node(FileNode *head);
 
 
 #if 1
@@ -82,11 +102,13 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
 {
     int ret = 0;
     MYPRINT("file_packet: start \n");
+    FrameNode *frameNode = obj->frameNode;
     FileInfo *info = &obj->info;
     char *data = obj->data;
     int data_size = obj->data_size;
     unsigned short seq_no = obj->seq_no;
     unsigned int frame_id = obj->frame_id;
+    unsigned int pic_id = obj->pic_id;
     unsigned int group_id = obj->group_id;
     unsigned int data_xorcode = obj->data_xorcode;
     
@@ -106,7 +128,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     long long now_time = api_get_sys_time(0);
     while(offset < data_size)
     {
-        int flag = !seq_no && !frame_id && !group_id;
+        int flag = !seq_no && !frame_id && !pic_id && !group_id;
         RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)&out_buf[offset2];
         FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&out_buf[offset2 + rtp_header_size];
         char *payload_ptr = (char *)&out_buf[offset2 + rtp_header_size + ext_size];
@@ -137,6 +159,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             rtp_ext->enable_encrypt = obj->enable_encrypt;    //是否加密
             rtp_ext->enable_fec = obj->enable_fec;         //是否开启fec
             rtp_ext->frame_id = obj->frame_id;
+            rtp_ext->pic_id = obj->pic_id;
             rtp_ext->group_id = obj->group_id;
             rtp_ext->pkt_idx = obj->pkt_idx;
 			rtp_ext->time_stamp0 = now_time & 0xFFFFFFFF;
@@ -149,6 +172,13 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             //
             offset2 += (int)(rtp_header_size + ext_size + payload_size);
             rtpSize[i] = rtp_header_size + ext_size + payload_size;
+            //
+            FileNode *pnew = (FileNode *)calloc(1, sizeof(FileNode));
+            pnew->size = rtp_header_size + ext_size + payload_size;
+            pnew->data = (char)calloc(1, sizeof(char));
+            memcpy((void *)pnew->data, (void *)rtp_hdr, pnew->size);
+            file_add_node(frameNode->head, &pnew);
+
         }
         else{
             int tail = data_size - offset;
@@ -161,6 +191,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             rtp_ext->enable_encrypt = obj->enable_encrypt;    //是否加密
             rtp_ext->enable_fec = obj->enable_fec;         //是否开启fec
             rtp_ext->frame_id = obj->frame_id;
+            rtp_ext->pic_id = obj->pic_id;
             rtp_ext->group_id = obj->group_id;
             rtp_ext->pkt_idx = obj->pkt_idx;
 			rtp_ext->time_stamp0 = now_time & 0xFFFFFFFF;
@@ -175,6 +206,12 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             obj->snd_size += payload_size;
             rtpSize[i] = rtp_header_size + ext_size + payload_size;
             obj->pkt_idx++;
+            //
+            FileNode *pnew = (FileNode *)calloc(1, sizeof(FileNode));
+            pnew->size = rtp_header_size + ext_size + payload_size;
+            pnew->data = (char)calloc(1, sizeof(char));
+            memcpy((void *)pnew->data, (void *)rtp_hdr, pnew->size);
+            file_add_node(frameNode->head, &pnew);
         }
         i++;
         if(obj->snd_size == filesize)
@@ -207,6 +244,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             rtp_ext->enable_encrypt = obj->enable_encrypt;    //是否加密
             rtp_ext->enable_fec = obj->enable_fec;         //是否开启fec
             rtp_ext->frame_id = obj->frame_id;
+            rtp_ext->pic_id = obj->pic_id;
             rtp_ext->group_id = obj->group_id;
             rtp_ext->pkt_idx = obj->pkt_idx - 1;
             rtp_ext->pkt_idx = obj->pkt_idx;//test
@@ -221,6 +259,12 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             rtpSize[i] = rtp_header_size + ext_size + payload_size;
             //obj->pkt_idx++;
             i++;
+            //
+            FileNode *pnew = (FileNode *)calloc(1, sizeof(FileNode));
+            pnew->size = rtp_header_size + ext_size + payload_size;
+            pnew->data = (char)calloc(1, sizeof(char));
+            memcpy((void *)pnew->data, (void *)rtp_hdr, pnew->size);
+            file_add_node(frameNode->head, &pnew);
         }
         //printf("file_packet: offset=%d, i=%d \n", offset, i);
     }
@@ -239,6 +283,7 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
     int data_size = obj->data_size;
     unsigned short seq_no = obj->seq_no;
     unsigned int frame_id = obj->frame_id;
+    unsigned int pic_id = obj->pic_id;
     unsigned int group_id = obj->group_id;
     unsigned int data_xorcode = obj->data_xorcode;
     
@@ -307,6 +352,7 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
                 dst_head->data_type = rtp_ext->data_type;
                 dst_head->enable_encrypt = rtp_ext->enable_encrypt;
                 dst_head->frame_id = rtp_ext->frame_id;
+                dst_head->pic_id = rtp_ext->pic_id;
                 dst_head->group_id = rtp_ext->group_id;
                 dst_head->pkt_idx = rtp_ext->pkt_idx;
                 //
@@ -408,7 +454,7 @@ int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, int size, short *pkt_size, u
 }
 //./ffplay -f rawvideo -video_size $WXH2 $OUT_FILE
 FQT_API
-int call_test(char *ifilename, char *ofilename, char *idxfilename)
+int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
 {
     int ret = 0;
     char ofilename2[256] = "";
@@ -455,12 +501,34 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
         int frame_blks = 256;
         rObj.info.frame_size = frame_blks;
         int frame_size = frame_blks * mtu_size;
+        //
+        if(img_size > 0)
+        {
+            frame_size = img_size;//(1920 * 1080 * 3) / 2;
+            frame_blks = frame_size / mtu_size + ((frame_size % mtu_size) != 0);
+            frame_size = frame_size > 256 ? 256 : frame_size;
+            rObj.info.frame_size = frame_blks;
+        }
+        //
         rObj.info.frame_num = (total_size / frame_size) + ((total_size % frame_size) != 0);
 
-        int group_blks = 256;
+        int pic_blks = 256;//12;
+        rObj.info.pic_size = pic_blks;
+        int pic_size = pic_blks * frame_size;
+        //
+        if(img_size > 0)
+        {
+            pic_size = img_size;//(1920 * 1080 * 3) / 2;
+            pic_blks = pic_size / frame_size + ((pic_size % frame_size) != 0);
+            rObj.info.pic_size = pic_blks;
+        }
+        //
+        rObj.info.pic_num = (total_size / pic_size) + ((total_size % pic_size) != 0);
+
+        int group_blks = 12;//256;
         rObj.info.group_size = group_blks;
-        int group_size = group_blks * frame_size;
-        rObj.info.group_num = (total_size / group_size) + ((total_size % group_size) != 0);
+        int group_size = group_blks * pic_size;
+        rObj.info.group_num = (total_size / pic_size) + ((total_size % pic_size) != 0);
 
         char *ptr = calloc(1, frame_size);
         rObj.data = ptr;
@@ -493,6 +561,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
         {
             //group: 256 * 256 * 1100 > 64MB
             rObj.frame_id = 0;
+            GroupNode *groupNode = (GroupNode *)calloc(1, sizeof(GroupNode));
+            pic_create_node(&groupNode->head);
             for(int i = 0; i < rObj.info.group_size; i++)
             {
                 MYPRINT("call_test: rObj.info.group_size=%d, i=%d \n", rObj.info.group_size, i);
@@ -500,77 +570,70 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename)
                 {
                     break;
                 }
-                int offset = 0;
-                char *ptr = rObj.data;
-                long long time0 = api_get_sys_time(0);
-#if 1
-                int rsize = fread(&ptr[offset], 1, mtu_size * rObj.info.frame_size, rfp);
-                if(rsize != (mtu_size * rObj.info.frame_size))
+                PicNode *picNode = (PicNode *)calloc(1, sizeof(PicNode));
+                frame_create_node(&picNode->head);
+                for(int j = 0; j < rObj.info.pic_size; j++)
                 {
-                    printf("call_test: rsize=%d, ######## \n", rsize);
-                    status = 1;
-                }
-                sumsize += rsize;
-                offset += rsize;
-#else
-                for(int j = 0; j < rObj.info.frame_size; j++)
-                {
+                    if(status)
+                    {
+                        break;
+                    }
+                    FrameNode *frameNode = (FrameNode *)calloc(1, sizeof(FrameNode));
+                    file_create_node(&frameNode->head);
+                    rObj.frameNode = frameNode;
+
+                    int offset = 0;
+                    char *ptr = rObj.data;
+                    long long time0 = api_get_sys_time(0);
+                    int rsize = fread(&ptr[offset], 1, frame_size, rfp);
+                    if(rsize != frame_size)
+                    {
+                        printf("call_test: rsize=%d, ######## \n", rsize);
+                        status = 1;
+                    }
+                    sumsize += rsize;
+                    offset += rsize;
+                    long long time1 = api_get_sys_time(0);
+                    int difftime = (int)(time1 - time0);
+                    if(difftime > 10)
+                        MYPRINT("call_test: read: difftime=%d (ms) \n", difftime);
+                    //
+                    rObj.data_size = offset;//frame_size;
+                    rObj.data_xorcode = 0;
+                    //
+                    int ret = file_packet(&rObj, out_buf, out_size, rtpSize);
+                    //printf("call_test: file_packet: ret=%d \n", ret);
+                    wObj.data = out_buf;
+                    wObj.data_size = ret;//rObj.data_size;
+                    ret = file_unpacket(&wObj, out_buf2, out_size2, oSize);
+                    //printf("call_test: file_unpacket: ret=%d \n", ret);
+                    //
+                    time0 = api_get_sys_time(0);
+                    ret = pkt2file(idxfp, wfp, out_buf2, ret, oSize, &pkt_idx);
+                    time1 = api_get_sys_time(0);
+                    difftime = (int)(time1 - time0);
+                    if(difftime > 10)
+                        MYPRINT("call_test: write: difftime=%d (ms) \n", difftime);
+                    sumsize2 += ret;
+                    //printf("call_test: pkt2file: ret=%d \n", ret);
+                    if(sumsize != sumsize2)
+                    {
+                        printf("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
+                        printf("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
+                    }
+                    frame_add_node(picNode->head, &frameNode);
                     if(sumsize >= total_size)
                     {
                         printf("call_test: sumsize=%lld, total_size=%lld ######## \n", sumsize, total_size);
                         status = 1;
                         break;
                     }
-                    //printf("call_test: rObj.info.frame_size=%d \n", rObj.info.frame_size);
-                    int rsize = fread(&ptr[offset], 1, mtu_size, rfp);
-                    //printf("call_test: rsize=%d, j=%d \n", rsize, j);
-                    if(rsize != mtu_size)
-                    {
-                        printf("call_test: rsize=%d, j=%d ######## \n", rsize, j);
-                        status = 1;
-                        sumsize += rsize;
-                        offset += rsize;
-                        break;
-                    }
-                    sumsize += rsize;
-                    offset += rsize;
-                }
-#endif
-                long long time1 = api_get_sys_time(0);
-                int difftime = (int)(time1 - time0);
-                if(difftime > 10)
-                    MYPRINT("call_test: read: difftime=%d (ms) \n", difftime);
-                //
-                rObj.data_size = offset;//frame_size;
-                rObj.data_xorcode = 0;
-                //
-                int ret = file_packet(&rObj, out_buf, out_size, rtpSize);
-                //printf("call_test: file_packet: ret=%d \n", ret);
-                wObj.data = out_buf;
-                wObj.data_size = ret;//rObj.data_size;
-                ret = file_unpacket(&wObj, out_buf2, out_size2, oSize);
-                //printf("call_test: file_unpacket: ret=%d \n", ret);
-                //
-                time0 = api_get_sys_time(0);
-                ret = pkt2file(idxfp, wfp, out_buf2, ret, oSize, &pkt_idx);
-                time1 = api_get_sys_time(0);
-                difftime = (int)(time1 - time0);
-                if(difftime > 10)
-                    MYPRINT("call_test: write: difftime=%d (ms) \n", difftime);
-                sumsize2 += ret;
-                //printf("call_test: pkt2file: ret=%d \n", ret);
-                if(sumsize != sumsize2)
-                {
-                    printf("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
-                    printf("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
-                }
-                if(sumsize >= total_size)
-                {
-                    printf("call_test: sumsize=%lld, total_size=%lld ######## \n", sumsize, total_size);
-                    status = 1;
-                    break;
-                }
-            }
+                }//j
+                pic_add_node(groupNode->head, &picNode);
+                rObj.pic_id++;
+            }//i
+            group_add_node(rObj.head, &groupNode);
+            rObj.group_id++;
             k++;
             printf("call_test: sumsize=%lld, sumsize2=%lld, total_size=%lld \n", sumsize, sumsize2, total_size);
             printf("call_test: sumsize=%d (MB), status=%d, k=%d \n", (sumsize >> 20), status, k);

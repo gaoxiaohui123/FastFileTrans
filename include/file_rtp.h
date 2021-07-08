@@ -142,6 +142,7 @@ typedef struct {
     unsigned int enable_fec : 1;         //是否开启fec
     unsigned int frame_id : 16;
     unsigned int group_id : 16;
+    unsigned int pic_id;                //only use for picture
     unsigned int pkt_idx;
     unsigned int rtp_xorcode;           //当前数据块（包括rtp头）异或码
     unsigned int time_stamp0;
@@ -151,9 +152,11 @@ typedef struct{
     unsigned long long filesize;    //文件大小（maxsize = 4T?）
     unsigned int block_size : 16;   //mtu size, 默认1100bytes
     unsigned int frame_size : 16;    //default: 256
+    unsigned int pic_size : 16;     //pic_size = n * frame_size
     unsigned int group_size : 16;    //default: 64MB
     unsigned int block_num;         //block 个数 = filesize / block_size
     unsigned int frame_num;
+    unsigned int pic_num;
     unsigned int group_num;
     unsigned int file_xorcode;      //文件异或码（文件首个64MBytes）
     unsigned char filename[256];    //文件名
@@ -166,23 +169,45 @@ typedef struct{
     unsigned int data_size : 10;        //当前索引数据块大小
     unsigned int frame_id : 16;
     unsigned int group_id : 16;
+    unsigned int pic_id;
     unsigned int pkt_idx;
 }CacheHead;
 
 struct FileInfo {
-    //void *sock;//
+    char *data;
+    int size;
     int num;
     int id;
     struct FileInfo *tail;
     struct FileInfo *next;
 };
 typedef struct FileInfo FileNode;
+//FEC
+struct FrameInfo {
+    //void *sock;//
+    int num;
+    int id;
+    FileNode *head;
+    struct FrameInfo *tail;
+    struct FrameInfo *next;
+};
+typedef struct FrameInfo FrameNode;
+
+struct PicInfo {
+    //void *sock;//
+    int num;
+    int id;
+    FrameNode *head;
+    struct PicInfo *tail;
+    struct PicInfo *next;
+};
+typedef struct PicInfo PicNode;
 
 struct GroupInfo {
     //void *sock;//
     int num;
     int id;
-    FileNode *head;
+    PicNode *head;
     struct GroupInfo *tail;
     struct GroupInfo *next;
 };
@@ -199,11 +224,13 @@ typedef struct{
     unsigned int enable_encrypt;    //是否加密
     unsigned int enable_fec;         //是否开启fec
     unsigned long long snd_size;
+    unsigned int pic_id;
     unsigned int pkt_idx;//4*1024*1024*1024*1024;//4T
     long long now_time;
     long long start_time;
     int net_time;
     GroupNode *head;
+    FrameNode *frameNode;
     FILE *index_fp;
     FILE *raw_fp;
 }FileRtpObj;
