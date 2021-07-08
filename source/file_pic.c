@@ -7,9 +7,11 @@ extern void *frame_find_node(FrameNode *head);
 extern void frame_delete_node(FrameNode *head);
 extern void frame_free_node(FrameNode *head);
 
-int pic_create_node(PicNode **head)
+void pic_delete_node(PicNode *head);
+
+int pic_create_node(PicNode **head0)
 {
-    //PicNode *head = *head0;
+    PicNode *head = *head0;
     if(!head)
     {
         //MYPRINT("PushData: create head: obj->data_list=%x \n", obj->data_list);

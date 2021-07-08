@@ -9,9 +9,9 @@ extern void pic_free_node(PicNode *head);
 
 void group_delete_node(GroupNode *head);
 
-int group_create_node(GroupNode **head)
+int group_create_node(GroupNode **head0)
 {
-    //GroupNode *head = *head0;
+    GroupNode *head = *head0;
     if(!head)
     {
         //MYPRINT("PushData: create head: obj->data_list=%x \n", obj->data_list);

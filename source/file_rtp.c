@@ -624,7 +624,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                         printf("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
                     }
                     frame_add_node(picNode->head, &frameNode);
-                    obj->frame_id++;
+                    rObj.frame_id++;
                     if(sumsize >= total_size)
                     {
                         printf("call_test: sumsize=%lld, total_size=%lld ######## \n", sumsize, total_size);
