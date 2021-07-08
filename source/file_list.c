@@ -22,20 +22,21 @@ int file_create_node(FileNode **head0)
     return 0;
 }
 
-void file_add_node(FileNode *head0, FileNode **pnew)
+void file_add_node(FileNode *head, FileNode **pnew)
 {
+    //MYPRINT2("file_add_node: (*pnew)=%x \n", (*pnew));
     if(!(*pnew))
     {
         (*pnew) = calloc(1, sizeof(FileNode));
     }
-    FileNode *head = head0;//obj->broadCastHead;
+    //FileNode *head = head0;//obj->broadCastHead;
     (*pnew)->next = NULL;   //新节点指针域置NULL
     head->tail->next = *pnew;  //新节点插入到表尾
     head->tail = *pnew;   //为指针指向当前的尾节点
     head->id++;
     head->num++;
     (*pnew)->id = head->id;
-    MYPRINT2("file_add_node: head->num=%d, (*pnew)->id=%d \n", head->num, (*pnew)->id);
+    //MYPRINT2("file_add_node: head->num=%d, (*pnew)->id=%d \n", head->num, (*pnew)->id);
 
 }
 void *file_find_node(FileNode *head)

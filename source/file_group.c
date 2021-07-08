@@ -48,7 +48,7 @@ void group_add_node(GroupNode *head0, GroupNode **pnew)
     head->id++;
     head->num++;
     (*pnew)->id = head->id;
-    MYPRINT2("group_add_node: head->num=%d, (*pnew)->id=%d \n", head->num, (*pnew)->id);
+    //MYPRINT2("group_add_node: head->num=%d, (*pnew)->id=%d \n", head->num, (*pnew)->id);
 
 }
 #if 1

@@ -41,7 +41,7 @@ void pic_add_node(PicNode *head0, PicNode **pnew)
     head->id++;
     head->num++;
     (*pnew)->id = head->id;
-    MYPRINT2("pic_add_node: head->num=%d, (*pnew)->id=%d \n", head->num, (*pnew)->id);
+    //MYPRINT2("pic_add_node: head->num=%d, (*pnew)->id=%d \n", head->num, (*pnew)->id);
 
 }
 #if 1
