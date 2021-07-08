@@ -556,7 +556,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         rObj.enable_encrypt = 0;
         rObj.enable_fec = 0;
         rObj.picNode = NULL;
-        //pic_create_node(&rObj.picNode);
+        pic_create_node(&rObj.picNode);
         //
         printf("call_test: total_size=%d \n", total_size);
         //
@@ -565,8 +565,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
             //group: 256 * 256 * 1100 > 64MB
             //rObj.group_id = 0;
             GroupNode *groupNode = (GroupNode *)calloc(1, sizeof(GroupNode));
-            pic_create_node(&groupNode->head);
-            //groupNode->head = rObj.picNode;
+            //pic_create_node(&groupNode->head);
+            groupNode->head = rObj.picNode;
             for(int i = 0; i < rObj.info.group_size; i++)
             {
                 MYPRINT("call_test: rObj.info.group_size=%d, i=%d \n", rObj.info.group_size, i);
@@ -635,6 +635,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                         break;
                     }
                 }//j
+                group_delete_node(groupNode->head);
+                groupNode->head->num--;
                 pic_add_node(groupNode->head, &picNode);
                 rObj.pic_id++;
             }//i

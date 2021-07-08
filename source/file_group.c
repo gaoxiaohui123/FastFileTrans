@@ -37,12 +37,14 @@ void group_add_node(GroupNode *head, GroupNode **pnew)
         pic_create_node(&((*pnew)->head));
     }
     //GroupNode *head = head0;//obj->broadCastHead;
+ #if 0
     if(head->num > 0)
     {
         MYPRINT2("group_add_node: head->num=%d \n", head->num);
         group_delete_node(head);
         head->num--;
     }
+#endif
     (*pnew)->next = NULL;   //新节点指针域置NULL
     head->tail->next = *pnew;  //新节点插入到表尾
     head->tail = *pnew;   //为指针指向当前的尾节点
