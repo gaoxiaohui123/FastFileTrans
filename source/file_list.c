@@ -3,9 +3,9 @@
 
 
 
-int file_create_node(FileNode **head0)
+int file_create_node(FileNode **head)
 {
-    FileNode *head = *head0;
+    //FileNode *head = *head0;
     if(!head)
     {
         //MYPRINT("PushData: create head: obj->data_list=%x \n", obj->data_list);

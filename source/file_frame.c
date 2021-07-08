@@ -7,9 +7,9 @@ extern void *file_find_node(FileNode *head);
 extern void file_delete_node(FileNode *head);
 extern void file_free_node(FileNode *head);
 
-int frame_create_node(FrameNode **head0)
+int frame_create_node(FrameNode **head)
 {
-    FrameNode *head = *head0;
+    //FrameNode *head = *head0;
     if(!head)
     {
         //MYPRINT("PushData: create head: obj->data_list=%x \n", obj->data_list);
@@ -27,14 +27,14 @@ int frame_create_node(FrameNode **head0)
     return 0;
 }
 
-void frame_add_node(FrameNode *head0, FrameNode **pnew)
+void frame_add_node(FrameNode *head, FrameNode **pnew)
 {
     if(!(*pnew))
     {
         (*pnew) = calloc(1, sizeof(FrameNode));
         file_create_node(&((*pnew)->head));
     }
-    FrameNode *head = head0;//obj->broadCastHead;
+    //FrameNode *head = head0;//obj->broadCastHead;
     (*pnew)->next = NULL;   //新节点指针域置NULL
     head->tail->next = *pnew;  //新节点插入到表尾
     head->tail = *pnew;   //为指针指向当前的尾节点
