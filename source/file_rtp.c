@@ -175,7 +175,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             //
             FileNode *pnew = (FileNode *)calloc(1, sizeof(FileNode));
             pnew->size = rtp_header_size + ext_size + payload_size;
-            pnew->data = (char)calloc(1, sizeof(char));
+            pnew->data = (char)calloc(1, pnew->size * sizeof(char));
             memcpy((void *)pnew->data, (void *)rtp_hdr, pnew->size);
             file_add_node(frameNode->head, &pnew);
 
@@ -209,7 +209,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             //
             FileNode *pnew = (FileNode *)calloc(1, sizeof(FileNode));
             pnew->size = rtp_header_size + ext_size + payload_size;
-            pnew->data = (char)calloc(1, sizeof(char));
+            pnew->data = (char)calloc(1, pnew->size * sizeof(char));
             memcpy((void *)pnew->data, (void *)rtp_hdr, pnew->size);
             file_add_node(frameNode->head, &pnew);
         }
@@ -262,7 +262,7 @@ int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             //
             FileNode *pnew = (FileNode *)calloc(1, sizeof(FileNode));
             pnew->size = rtp_header_size + ext_size + payload_size;
-            pnew->data = (char)calloc(1, sizeof(char));
+            pnew->data = (char)calloc(1, pnew->size * sizeof(char));
             memcpy((void *)pnew->data, (void *)rtp_hdr, pnew->size);
             file_add_node(frameNode->head, &pnew);
         }
