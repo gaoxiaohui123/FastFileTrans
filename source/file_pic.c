@@ -27,14 +27,19 @@ int pic_create_node(PicNode **head0)
     return 0;
 }
 
-void pic_add_node(PicNode *head0, PicNode **pnew)
+void pic_add_node(PicNode *head, PicNode **pnew)
 {
     if(!(*pnew))
     {
         (*pnew) = calloc(1, sizeof(PicNode));
         frame_create_node(&((*pnew)->head));
     }
-    PicNode *head = head0;//obj->broadCastHead;
+    //PicNode *head = head0;//obj->broadCastHead;
+    if(head->num > 100)
+    {
+        MYPRINT2("pic_add_node: head->num=%d \n", head->num);
+        pic_delete_node(head);
+    }
     (*pnew)->next = NULL;   //新节点指针域置NULL
     head->tail->next = *pnew;  //新节点插入到表尾
     head->tail = *pnew;   //为指针指向当前的尾节点

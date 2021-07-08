@@ -29,19 +29,19 @@ int group_create_node(GroupNode **head0)
     return 0;
 }
 
-void group_add_node(GroupNode *head0, GroupNode **pnew)
+void group_add_node(GroupNode *head, GroupNode **pnew)
 {
     if(!(*pnew))
     {
         (*pnew) = calloc(1, sizeof(GroupNode));
         pic_create_node(&((*pnew)->head));
     }
-    GroupNode *head = head0;//obj->broadCastHead;
-    if(head->num > 100)
-    {
-        MYPRINT2("group_add_node: head->num=%d \n", head->num);
-        group_delete_node(head0);
-    }
+    //GroupNode *head = head0;//obj->broadCastHead;
+    //if(head->num > 100)
+    //{
+    //    MYPRINT2("group_add_node: head->num=%d \n", head->num);
+    //    group_delete_node(head0);
+    //}
     (*pnew)->next = NULL;   //新节点指针域置NULL
     head->tail->next = *pnew;  //新节点插入到表尾
     head->tail = *pnew;   //为指针指向当前的尾节点
