@@ -178,6 +178,7 @@ struct FileInfo {
     int size;
     int num;
     int id;
+    int max_num;
     struct FileInfo *tail;
     struct FileInfo *next;
 };
@@ -187,6 +188,7 @@ struct FrameInfo {
     //void *sock;//
     int num;
     int id;
+    int max_num;
     FileNode *head;
     struct FrameInfo *tail;
     struct FrameInfo *next;
@@ -197,6 +199,7 @@ struct PicInfo {
     //void *sock;//
     int num;
     int id;
+    int max_num;
     FrameNode *head;
     struct PicInfo *tail;
     struct PicInfo *next;
@@ -207,11 +210,38 @@ struct GroupInfo {
     //void *sock;//
     int num;
     int id;
+    int max_num;
     PicNode *head;
     struct GroupInfo *tail;
     struct GroupInfo *next;
 };
 typedef struct GroupInfo GroupNode;
+
+typedef struct
+{
+    char *data;
+    int size;
+}PktItem;
+typedef struct
+{
+    int max_num;
+    PktItem *pktItem;
+}FrameVector;
+typedef struct
+{
+    int max_num;
+    FrameVector *frameVector;
+}PicVector;
+struct GroupVector {
+    //void *sock;//
+    int num;
+    int id;
+    int max_num;
+    PicVector *picVector;
+    struct GroupVector *tail;
+    struct GroupVector *next;
+};
+typedef struct GroupVector GroupVectorNode;
 
 typedef struct{
     FileInfo info;
@@ -232,6 +262,7 @@ typedef struct{
     GroupNode *head;
     FrameNode *frameNode;
     PicNode *picNode;
+    GroupVectorNode *vectorNode;
     FILE *index_fp;
     FILE *raw_fp;
 }FileRtpObj;

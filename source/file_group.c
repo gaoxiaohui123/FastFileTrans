@@ -8,6 +8,7 @@ extern void pic_delete_node(PicNode *head);
 extern void pic_free_node(PicNode *head);
 
 void group_delete_node(GroupNode *head);
+void *group_find_node(GroupNode *head);
 
 int group_create_node(GroupNode **head0)
 {
@@ -37,12 +38,17 @@ void group_add_node(GroupNode *head, GroupNode **pnew)
         pic_create_node(&((*pnew)->head));
     }
     //GroupNode *head = head0;//obj->broadCastHead;
- #if 0
+ #if 1
     if(head->num > 0)
     {
         MYPRINT2("group_add_node: head->num=%d \n", head->num);
-        group_delete_node(head);
-        head->num--;
+
+        GroupNode *thisNode = group_find_node(head);
+        if(thisNode)
+        {
+            thisNode->head = NULL;
+            group_delete_node(head);
+        }
     }
 #endif
     (*pnew)->next = NULL;   //新节点指针域置NULL
@@ -74,7 +80,8 @@ void *group_find_node_by_id(GroupNode *head, int id)
         }
     }while(p->next);
     return ret;
-}void group_delete_node_by_id(GroupNode *head, int id)
+}
+void group_delete_node_by_id(GroupNode *head, int id)
 {
     GroupNode *ret = NULL;
     GroupNode *p,*q;
@@ -140,15 +147,8 @@ void *group_find_node(GroupNode *head)
         GroupNode *info = (GroupNode *)p;
         if(p)
         {
-#if 0
-            struct sockaddr_in *paddr = (struct sockaddr_in *)&info->addr_client;
-            int flag = (paddr->sin_port - addr_client.sin_port) | (paddr->sin_addr.s_addr - addr_client.sin_addr.s_addr);
-            if(!flag)
-            {
-                ret = (void *)p;
-                break;
-            }
-#endif
+            ret = (void *)p;
+            break;
         }
     }while(p->next);
     return ret;

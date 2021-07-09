@@ -39,9 +39,8 @@ void pic_add_node(PicNode *head, PicNode **pnew)
     //PicNode *head = head0;//obj->broadCastHead;
     if(head->num > 50)
     {
-        MYPRINT2("pic_add_node: head->num=%d \n", head->num);
+        MYPRINT("pic_add_node: head->num=%d \n", head->num);
         pic_delete_node(head);
-        head->num--;
     }
     (*pnew)->next = NULL;   //新节点指针域置NULL
     head->tail->next = *pnew;  //新节点插入到表尾
@@ -72,7 +71,8 @@ void *pic_find_node_by_id(PicNode *head, int id)
         }
     }while(p->next);
     return ret;
-}void pic_delete_node_by_id(PicNode *head, int id)
+}
+void pic_delete_node_by_id(PicNode *head, int id)
 {
     PicNode *ret = NULL;
     PicNode *p,*q;
@@ -161,32 +161,16 @@ void pic_delete_node(PicNode *head)
     {
         return;
     }
-    MYPRINT2("pic_delete_node: 0: head->num=%d \n", head->num);
+    MYPRINT("pic_delete_node: 0: head->num=%d \n", head->num);
     q = head;
     p = head->next;
     while(p && (p != head))
     {
-        MYPRINT2("pic_delete_node: p->id=%d \n", p->id);
-        //struct sockaddr_in *paddr = (struct sockaddr_in *)&p->addr_client;
-        int flag = 0;//(p->addr_client.sin_port - addr_client.sin_port) | (p->addr_client.sin_addr.s_addr - addr_client.sin_addr.s_addr);
-        if(!flag && p != head)
+        if(p != head)
         {
+            MYPRINT2("pic_delete_node: p->id=%d \n", p->id);
             ret = p;
             break;
-        }
-        else{
-            //if(p->addr_client.sin_port | p->addr_client.sin_addr.s_addr | addr_client.sin_port | addr_client.sin_addr.s_addr)
-            if(flag)
-            {
-                
-            }
-            else{
-                if(p->next != head)
-                {
-                    MYPRINT2("error: pic_delete_node: all zero \n");
-                    break;
-                }
-            }
         }
         q = p;//last
         p = p->next;
@@ -209,10 +193,10 @@ void pic_delete_node(PicNode *head)
             head->tail->next = q;
             head->tail = q;
         }
-        frame_delete_node(ret->head);
+        frame_free_node(ret->head);
         free(ret);
         head->num--;
-        MYPRINT2("pic_delete_node: head->num=%d \n", head->num);
+        MYPRINT("pic_delete_node: head->num=%d \n", head->num);
 
         return;
     }
@@ -229,6 +213,7 @@ void pic_free_node(PicNode *head) {
     {
         return;
     }
+    MYPRINT2("pic_delete_node: head=%x \n", head);
     p = head;
     while (p->next != NULL) {
         q = p->next;

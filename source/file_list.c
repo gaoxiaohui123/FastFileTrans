@@ -39,6 +39,45 @@ void file_add_node(FileNode *head, FileNode **pnew)
     //MYPRINT2("file_add_node: head->num=%d, (*pnew)->id=%d \n", head->num, (*pnew)->id);
 
 }
+void file_add_node_by_id(FileNode *head, char *data, int size, int id)
+{
+    void *ret = 0;
+    FileNode *p;
+    if(!head)
+    {
+        return ret;
+    }
+    p = head;
+    do{
+        p = p->next;
+        FileNode *info = (FileNode *)p;
+        if(p && (p->id < id))
+        {
+            ret = (void *)p;
+            break;
+        }
+    }while(p->next);
+}
+void *file_find_node_by_id(FileNode *head, int id)
+{
+    void *ret = 0;
+    FileNode *p;
+    if(!head)
+    {
+        return ret;
+    }
+    p = head;
+    do{
+        p = p->next;
+        FileNode *info = (FileNode *)p;
+        if(p && (p->id == id))
+        {
+            ret = (void *)p;
+            break;
+        }
+    }while(p->next);
+    return ret;
+}
 void *file_find_node(FileNode *head)
 {
     void *ret = 0;
@@ -53,15 +92,8 @@ void *file_find_node(FileNode *head)
         FileNode *info = (FileNode *)p;
         if(p)
         {
-#if 0
-            struct sockaddr_in *paddr = (struct sockaddr_in *)&info->addr_client;
-            int flag = (paddr->sin_port - addr_client.sin_port) | (paddr->sin_addr.s_addr - addr_client.sin_addr.s_addr);
-            if(!flag)
-            {
-                ret = (void *)p;
-                break;
-            }
-#endif
+            ret = (void *)p;
+            break;
         }
     }while(p->next);
     return ret;
@@ -81,26 +113,10 @@ void file_delete_node(FileNode *head)
     while(p && (p != head))
     {
         MYPRINT2("file_delete_node: p->id=%d \n", p->id);
-        //struct sockaddr_in *paddr = (struct sockaddr_in *)&p->addr_client;
-        int flag = 0;//(p->addr_client.sin_port - addr_client.sin_port) | (p->addr_client.sin_addr.s_addr - addr_client.sin_addr.s_addr);
-        if(!flag && p != head)
+        if(p != head)
         {
             ret = p;
             break;
-        }
-        else{
-            //if(p->addr_client.sin_port | p->addr_client.sin_addr.s_addr | addr_client.sin_port | addr_client.sin_addr.s_addr)
-            if(flag)
-            {
-                
-            }
-            else{
-                if(p->next != head)
-                {
-                    MYPRINT2("error: file_delete_node: all zero \n");
-                    break;
-                }
-            }
         }
         q = p;//last
         p = p->next;

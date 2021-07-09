@@ -635,8 +635,6 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                         break;
                     }
                 }//j
-                group_delete_node(groupNode->head);
-                groupNode->head->num--;
                 pic_add_node(groupNode->head, &picNode);
                 rObj.pic_id++;
             }//i

@@ -64,7 +64,8 @@ void *frame_find_node_by_id(FrameNode *head, int id)
         }
     }while(p->next);
     return ret;
-}void frame_delete_node_by_id(FrameNode *head, int id)
+}
+void frame_delete_node_by_id(FrameNode *head, int id)
 {
     FrameNode *ret = NULL;
     FrameNode *p,*q;
@@ -201,7 +202,7 @@ void frame_delete_node(FrameNode *head)
             head->tail->next = q;
             head->tail = q;
         }
-        file_delete_node(ret->head);
+        file_free_node(ret->head);
         free(ret);
         head->num--;
         MYPRINT2("frame_delete_node: head->num=%d \n", head->num);
