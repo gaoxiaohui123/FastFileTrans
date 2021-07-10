@@ -36,7 +36,9 @@ CSRCS = $(wildcard $(SRC_ROOT)/source/file_rtp.c \
 $(SRC_ROOT)/source/file_list.c \
 $(SRC_ROOT)/source/file_frame.c \
 $(SRC_ROOT)/source/file_pic.c \
-$(SRC_ROOT)/source/file_group.c)
+$(SRC_ROOT)/source/file_group.c \
+$(SRC_ROOT)/source/file_raw2pkt.c \
+$(SRC_ROOT)/source/file_pkt2raw.c)
 
 CPPSRCS =
 #$(wildcard $(SRC_ROOT)/modules/video_processing/util/denoiser_filter_c.cc

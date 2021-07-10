@@ -29,6 +29,11 @@
 
 #include "file_rtp.h"
 
+extern int create_vector(FileRtpObj *obj);
+extern int release_vector(FileRtpObj *obj);
+extern int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize);
+extern int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize);
+
 extern int group_create_node(GroupNode **head0);
 extern void group_add_node(GroupNode *head0, GroupNode **pnew);
 extern void *group_find_node_by_id(GroupNode *head, int id);
@@ -98,276 +103,6 @@ long long api_get_sys_time(int delay)
 
 #endif
 
-int file_packet(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
-{
-    int ret = 0;
-    MYPRINT("file_packet: start \n");
-    FrameNode *frameNode = obj->frameNode;
-    FileInfo *info = &obj->info;
-    char *data = obj->data;
-    int data_size = obj->data_size;
-    unsigned short seq_no = obj->seq_no;
-    unsigned int frame_id = obj->frame_id;
-    unsigned int pic_id = obj->pic_id;
-    unsigned int group_id = obj->group_id;
-    unsigned int data_xorcode = obj->data_xorcode;
-    
-    unsigned long long filesize = info->filesize;    //文件大小（maxsize = 4T?）
-    unsigned int block_size = info->block_size;   //mtu size, 默认1100bytes
-    unsigned int block_num = info->block_num;         //block 个数 = filesize / block_size
-    unsigned int file_xorcode = info->file_xorcode;      //文件异或码（文件首个64MBytes）
-    unsigned char filename = info->filename;    //文件名
-    
-    int rtp_header_size = sizeof(RTP_FIXED_HEADER);
-    int ext_size = sizeof(FILE_EXTEND_HEADER);
-    int rtp_extend_length = (sizeof(FILE_EXTEND_HEADER) >> 2) - 1;
-    int offset  = 0;
-    int offset2  = 0;
-    int i = 0;
-    //printf("file_packet: data_size=%d \n", data_size);
-    long long now_time = api_get_sys_time(0);
-    while(offset < data_size)
-    {
-        int flag = !seq_no && !frame_id && !pic_id && !group_id;
-        RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)&out_buf[offset2];
-        FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&out_buf[offset2 + rtp_header_size];
-        char *payload_ptr = (char *)&out_buf[offset2 + rtp_header_size + ext_size];
-        rtp_hdr->payload     = FILE_PLT;  //负载类型号，									PT
-        rtp_hdr->version     = 2;  //版本号，此版本固定为2								V
-        rtp_hdr->padding	 = 0;//														P
-        rtp_hdr->csrc_len	 = 0;//														CC
-        rtp_hdr->marker		 = 0;//(size >= len);   //标志位，由具体协议规定其值。		M
-        rtp_hdr->ssrc        = 0;//ssrc;//(unsigned int)svc_nalu;;//htonl(10);    //随机指定为10，并且在本RTP会话中全局唯一	SSRC
-        rtp_hdr->extension	 = 1;//														X
-        rtp_hdr->timestamp   = 0;//?
-        rtp_hdr->seq_no = obj->seq_no;//(*seq_num);///htons(seq_num ++); //序列号，每发送一个RTP包增1
-        if (seq_no >= MAX_USHORT)
-        {
-            seq_no = 0;
-        }
-        else{
-            seq_no++;
-        }
-        if(flag)
-        {
-            printf("file_packet: 000000000000000000000 uuuuuuuuuuuuuuu \n");
-            short payload_size = sizeof(FileInfo);
-            rtp_ext->rtp_extend_profile = EXTEND_PROFILE_ID;
-            rtp_ext->rtp_extend_length = ((rtp_extend_length & 0xFF) << 8) | ((rtp_extend_length >> 8));
-            rtp_ext->rtp_pkt_size = sizeof(FileInfo);         //当前rtp包大小
-            rtp_ext->data_type = 1;         //1:file start info;2:file end info; 0:raw data
-            rtp_ext->enable_encrypt = obj->enable_encrypt;    //是否加密
-            rtp_ext->enable_fec = obj->enable_fec;         //是否开启fec
-            rtp_ext->frame_id = obj->frame_id;
-            rtp_ext->pic_id = obj->pic_id;
-            rtp_ext->group_id = obj->group_id;
-            rtp_ext->pkt_idx = obj->pkt_idx;
-			rtp_ext->time_stamp0 = now_time & 0xFFFFFFFF;
-			rtp_ext->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
-            rtp_ext->rtp_xorcode = 0;
-            //obj->pkt_idx++;
-            //
-            FileInfo *info_data = (FileInfo *)payload_ptr;//&out_buf[offset2 + rtp_header_size + ext_size];
-            memcpy((void *)info_data, (void *)info, payload_size);
-            //
-            offset2 += (int)(rtp_header_size + ext_size + payload_size);
-            rtpSize[i] = rtp_header_size + ext_size + payload_size;
-            //
-            FileNode *pnew = (FileNode *)calloc(1, sizeof(FileNode));
-            pnew->size = rtp_header_size + ext_size + payload_size;
-            pnew->data = (char *)calloc(1, pnew->size * sizeof(char));
-            memcpy((void *)pnew->data, (void *)rtp_hdr, pnew->size);
-            file_add_node(frameNode->head, &pnew);
-        }
-        else{
-            int tail = data_size - offset;
-            int payload_size = tail >= block_size ? block_size : tail;
-            
-            rtp_ext->rtp_extend_profile = EXTEND_PROFILE_ID;
-            rtp_ext->rtp_extend_length = ((rtp_extend_length & 0xFF) << 8) | ((rtp_extend_length >> 8));
-            rtp_ext->rtp_pkt_size = payload_size;         //当前rtp包大小
-            rtp_ext->data_type = 0;         //1:file start info;2:file end info; 0:raw data
-            rtp_ext->enable_encrypt = obj->enable_encrypt;    //是否加密
-            rtp_ext->enable_fec = obj->enable_fec;         //是否开启fec
-            rtp_ext->frame_id = obj->frame_id;
-            rtp_ext->pic_id = obj->pic_id;
-            rtp_ext->group_id = obj->group_id;
-            rtp_ext->pkt_idx = obj->pkt_idx;
-			rtp_ext->time_stamp0 = now_time & 0xFFFFFFFF;
-			rtp_ext->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
-            rtp_ext->rtp_xorcode = 0;
-            //
-            char *src_ptr = (char *)&data[offset];
-            memcpy((void *)payload_ptr, (void *)src_ptr, payload_size);
-            //
-            offset += (int)payload_size;
-            offset2 += (int)(rtp_header_size + ext_size + payload_size);
-            obj->snd_size += payload_size;
-            rtpSize[i] = rtp_header_size + ext_size + payload_size;
-            obj->pkt_idx++;
-            //
-            FileNode *pnew = (FileNode *)calloc(1, sizeof(FileNode));
-            pnew->size = rtp_header_size + ext_size + payload_size;
-            pnew->data = (char *)calloc(1, pnew->size * sizeof(char));
-            memcpy((void *)pnew->data, (void *)rtp_hdr, pnew->size);
-            file_add_node(frameNode->head, &pnew);
-        }
-        i++;
-        if(obj->snd_size == filesize)
-        {
-            RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)&out_buf[offset2];
-            FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&out_buf[offset2 + rtp_header_size];
-            char *payload_ptr = (char *)&out_buf[offset2 + rtp_header_size + ext_size];
-            rtp_hdr->payload     = FILE_PLT;  //负载类型号，									PT
-            rtp_hdr->version     = 2;  //版本号，此版本固定为2								V
-            rtp_hdr->padding	 = 0;//														P
-            rtp_hdr->csrc_len	 = 0;//														CC
-            rtp_hdr->marker		 = 0;//(size >= len);   //标志位，由具体协议规定其值。		M
-            rtp_hdr->ssrc        = 0;//ssrc;//(unsigned int)svc_nalu;;//htonl(10);    //随机指定为10，并且在本RTP会话中全局唯一	SSRC
-            rtp_hdr->extension	 = 1;//														X
-            rtp_hdr->timestamp   = 0;//?
-            rtp_hdr->seq_no = obj->seq_no;//(*seq_num);///htons(seq_num ++); //序列号，每发送一个RTP包增1
-            if (seq_no >= MAX_USHORT)
-            {
-                seq_no = 0;
-            }
-            else{
-                seq_no++;
-            }
-            printf("file_packet: obj->snd_size=%d, filesize=%d uuuuuuuuuuuuuuu \n", obj->snd_size, filesize);
-            short payload_size = sizeof(FileInfo);
-            rtp_ext->rtp_extend_profile = EXTEND_PROFILE_ID;
-            rtp_ext->rtp_extend_length = ((rtp_extend_length & 0xFF) << 8) | ((rtp_extend_length >> 8));
-            rtp_ext->rtp_pkt_size = sizeof(FileInfo);         //当前rtp包大小
-            rtp_ext->data_type = 2;         //1:file start info;2:file end info; 0:raw data
-            rtp_ext->enable_encrypt = obj->enable_encrypt;    //是否加密
-            rtp_ext->enable_fec = obj->enable_fec;         //是否开启fec
-            rtp_ext->frame_id = obj->frame_id;
-            rtp_ext->pic_id = obj->pic_id;
-            rtp_ext->group_id = obj->group_id;
-            rtp_ext->pkt_idx = obj->pkt_idx - 1;
-            rtp_ext->pkt_idx = obj->pkt_idx;//test
-			rtp_ext->time_stamp0 = now_time & 0xFFFFFFFF;
-			rtp_ext->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
-            rtp_ext->rtp_xorcode = 0;
-            //
-            FileInfo *info_data = (FileInfo *)payload_ptr;//&out_buf[offset2 + rtp_header_size + ext_size];
-            memcpy((void *)info_data, (void *)info, payload_size);
-            //
-            offset2 += (int)(rtp_header_size + ext_size + payload_size);
-            rtpSize[i] = rtp_header_size + ext_size + payload_size;
-            //obj->pkt_idx++;
-            i++;
-            //
-            FileNode *pnew = (FileNode *)calloc(1, sizeof(FileNode));
-            pnew->size = rtp_header_size + ext_size + payload_size;
-            pnew->data = (char *)calloc(1, pnew->size * sizeof(char));
-            memcpy((void *)pnew->data, (void *)rtp_hdr, pnew->size);
-            file_add_node(frameNode->head, &pnew);
-        }
-        //printf("file_packet: offset=%d, i=%d \n", offset, i);
-    }
-    //obj->frame_id++;
-    obj->seq_no = seq_no;
-    ret = offset2;
-    MYPRINT("file_packet: ret=%d \n", ret);
-    return ret;
-}
-int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
-{
-    int ret = 0;
-    MYPRINT("file_unpacket: start: \n");
-    FileInfo *info = &obj->info;
-    char *data = obj->data;
-    int data_size = obj->data_size;
-    unsigned short seq_no = obj->seq_no;
-    unsigned int frame_id = obj->frame_id;
-    unsigned int pic_id = obj->pic_id;
-    unsigned int group_id = obj->group_id;
-    unsigned int data_xorcode = obj->data_xorcode;
-    
-    unsigned long long filesize = info->filesize;    //文件大小（maxsize = 4T?）
-    unsigned int block_size = info->block_size;   //mtu size, 默认1100bytes
-    unsigned int block_num = info->block_num;         //block 个数 = filesize / block_size
-    unsigned int file_xorcode = info->file_xorcode;      //文件异或码（文件首个64MBytes）
-    unsigned char filename = info->filename;    //文件名
-    
-    int rtp_header_size = sizeof(RTP_FIXED_HEADER);
-    int ext_size = sizeof(FILE_EXTEND_HEADER);
-    int rtp_extend_length = (sizeof(FILE_EXTEND_HEADER) >> 2) - 1;
-    int offset  = 0;
-    int offset2  = 0;
-    int i = 0;
-    long long now_time = api_get_sys_time(0);
-    //printf("file_unpacket: data_size=%d \n", data_size);
-    while(offset < data_size)
-    {
-        int pkt_size = oSize[i];
-        oSize[i] = 0;
-        char *src_ptr = (char *)&data[offset];
-        RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)&data[offset];
-        FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&data[offset + rtp_header_size];
-        char *payload_ptr = (char *)&data[offset + rtp_header_size + ext_size];
-        //
-        int flag = 1;
-        flag &= rtp_hdr->payload     == FILE_PLT;  //负载类型号，									PT
-        flag &= rtp_hdr->version     == 2;  //版本号，此版本固定为2								V
-        flag &= rtp_hdr->padding	 == 0;//														P
-        flag &= rtp_hdr->csrc_len	 == 0;//														CC
-        flag &= rtp_hdr->marker		 == 0;//(size >= len);   //标志位，由具体协议规定其值。		M
-        //rtp_hdr->ssrc        = ssrc;//(unsigned int)svc_nalu;;//htonl(10);    //随机指定为10，并且在本RTP会话中全局唯一	SSRC
-        flag &= rtp_hdr->extension	 == 1;//														X
-        //rtp_hdr->timestamp   = 0;//?
-        //printf("file_unpacket: rtp_hdr->payload=%d \n", rtp_hdr->payload);
-        //printf("file_unpacket: flag=%d \n", flag);
-        if(flag)
-        {
-            unsigned short seq_no = rtp_hdr->seq_no;
-            //
-            unsigned short extprofile = rtp_ext->rtp_extend_profile;// & 7;
-            unsigned short rtp_extend_length = rtp_ext->rtp_extend_length;
-            rtp_extend_length = ((rtp_extend_length & 0xFF) << 8) | ((rtp_extend_length >> 8));
-            unsigned short extlen = (rtp_extend_length + 1) << 2;
-            unsigned short rtp_pkt_size = rtp_ext->rtp_pkt_size;
-            unsigned short this_pkt_size = rtp_pkt_size + extlen + rtp_header_size;
-            //printf("file_unpacket: this_pkt_size=%d, pkt_size=%d, extlen=%d, ext_size=%d \n", this_pkt_size, pkt_size, extlen, ext_size);
-            if(this_pkt_size == pkt_size && extlen == ext_size)
-            {
-                long long time_stamp0 = rtp_ext->time_stamp0;
-	            long long time_stamp1 = rtp_ext->time_stamp1;
-	            long long packet_time_stamp = time_stamp0 | (time_stamp1 << 32);
-	            if(!obj->net_time)
-	            {
-	                //与对端进行时间对准
-	                obj->net_time = now_time - packet_time_stamp;
-	            }
-
-                char *dst_ptr = (char *)&out_buf[offset2];
-                CacheHead *dst_head = (CacheHead *)dst_ptr;
-                char *dst_payload = (char *)&dst_ptr[sizeof(CacheHead)];
-                unsigned short dst_pkt_size = rtp_pkt_size + sizeof(CacheHead);
-                memcpy((void *)dst_payload, payload_ptr, rtp_pkt_size);
-                dst_head->rtp_pkt_size = rtp_ext->rtp_pkt_size;// + sizeof(CacheHead);
-                dst_head->data_type = rtp_ext->data_type;
-                dst_head->enable_encrypt = rtp_ext->enable_encrypt;
-                dst_head->frame_id = rtp_ext->frame_id;
-                dst_head->pic_id = rtp_ext->pic_id;
-                dst_head->group_id = rtp_ext->group_id;
-                dst_head->pkt_idx = rtp_ext->pkt_idx;
-                //
-                offset2 += (int)dst_pkt_size;
-                oSize[i] = rtp_ext->rtp_pkt_size + sizeof(CacheHead);
-                //printf("file_unpacket: offset2=%d, i=%d \n", offset2, i);
-            }
-        }
-        offset += pkt_size;
-        i++;
-        //printf("file_unpacket: offset=%d, i=%d \n", offset, i);
-    }
-    ret = offset2;
-    MYPRINT("file_unpacket: ret=%d \n", ret);
-    return ret;
-}
 int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, int size, short *pkt_size, unsigned int *p_pkt_idx)
 {
     MYPRINT("pkt2file: start: \n");
@@ -483,9 +218,20 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         //return;
         FileRtpObj rObj = {};
         FileRtpObj wObj = {};
+        rObj.cache_size = 100 * 1024 * 1024;//100MB
+        pthread_mutex_init(&rObj.lock,NULL);
+        pthread_mutex_init(&wObj.lock,NULL);
+        wObj.last_group_id = -1;//已经处理过的
+        wObj.last_pic_id = -1;////已经处理过的
+        memsset(&wObj.bwCount, 0, sizeof(BWCount));
+        memsset(&wObj.lrCount, 0, sizeof(LRCount));
+        wObj.lrCount.loss_rate = -1;
+        wObj.lrCount.last_check_time = 0;
         //
-        group_create_node(&rObj.head);
-        group_create_node(&wObj.head);
+        //group_create_node(&rObj.head);
+        //group_create_node(&wObj.head);
+        create_vector(&rObj);
+        create_vector(&wObj);
         //
         fseek(rfp, 0, SEEK_END);
         long long total_size = ftell(rfp);
@@ -524,9 +270,15 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         //
         rObj.info.pic_num = (total_size / pic_size) + ((total_size % pic_size) != 0);
 
-        int group_blks = 256;
+        int group_blks = 256;//默认:256*12*256*1100 = 825MB;调节内存占用大小
         rObj.info.group_size = group_blks;
         int group_size = group_blks * pic_size;
+        if(rObj.cache_size > 0)
+        {
+            group_size = rObj.cache_size;//(1920 * 1080 * 3) / 2;
+            group_blks = group_size / pic_size + ((group_size % pic_size) != 0);
+            rObj.info.group_size = group_blks;
+        }
         rObj.info.group_num = (total_size / pic_size) + ((total_size % pic_size) != 0);
 
         char *ptr = calloc(1, frame_size);
@@ -555,8 +307,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         rObj.pkt_idx = 0;
         rObj.enable_encrypt = 0;
         rObj.enable_fec = 0;
-        rObj.picNode = NULL;
-        pic_create_node(&rObj.picNode);
+        //rObj.picNode = NULL;
+        //pic_create_node(&rObj.picNode);
         //
         printf("call_test: total_size=%d \n", total_size);
         //
@@ -564,9 +316,10 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         {
             //group: 256 * 256 * 1100 > 64MB
             //rObj.group_id = 0;
-            GroupNode *groupNode = (GroupNode *)calloc(1, sizeof(GroupNode));
+            //GroupNode *groupNode = (GroupNode *)calloc(1, sizeof(GroupNode));
             //pic_create_node(&groupNode->head);
-            groupNode->head = rObj.picNode;
+            //groupNode->head = rObj.picNode;
+            //rObj.pic_id = 0;
             for(int i = 0; i < rObj.info.group_size; i++)
             {
                 MYPRINT("call_test: rObj.info.group_size=%d, i=%d \n", rObj.info.group_size, i);
@@ -575,17 +328,17 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                     break;
                 }
                 rObj.frame_id = 0;
-                PicNode *picNode = (PicNode *)calloc(1, sizeof(PicNode));
-                frame_create_node(&picNode->head);
+                //PicNode *picNode = (PicNode *)calloc(1, sizeof(PicNode));
+                //frame_create_node(&picNode->head);
                 for(int j = 0; j < rObj.info.pic_size; j++)
                 {
                     if(status)
                     {
                         break;
                     }
-                    FrameNode *frameNode = (FrameNode *)calloc(1, sizeof(FrameNode));
-                    file_create_node(&frameNode->head);
-                    rObj.frameNode = frameNode;
+                    //FrameNode *frameNode = (FrameNode *)calloc(1, sizeof(FrameNode));
+                    //file_create_node(&frameNode->head);
+                    //rObj.frameNode = frameNode;
 
                     int offset = 0;
                     char *ptr = rObj.data;
@@ -606,7 +359,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                     rObj.data_size = offset;//frame_size;
                     rObj.data_xorcode = 0;
                     //
-                    int ret = file_packet(&rObj, out_buf, out_size, rtpSize);
+                    //int ret = file_packet(&rObj, out_buf, out_size, rtpSize);
+                    int ret = raw2pkt(&rObj, out_buf, out_size, rtpSize);
                     //printf("call_test: file_packet: ret=%d \n", ret);
                     wObj.data = out_buf;
                     wObj.data_size = ret;//rObj.data_size;
@@ -626,7 +380,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                         printf("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
                         printf("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
                     }
-                    frame_add_node(picNode->head, &frameNode);
+                    //frame_add_node(picNode->head, &frameNode);
                     rObj.frame_id++;
                     if(sumsize >= total_size)
                     {
@@ -635,10 +389,10 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                         break;
                     }
                 }//j
-                pic_add_node(groupNode->head, &picNode);
+                //pic_add_node(groupNode->head, &picNode);
                 rObj.pic_id++;
             }//i
-            group_add_node(rObj.head, &groupNode);
+            //group_add_node(rObj.head, &groupNode);
             rObj.group_id++;
             k++;
             printf("call_test: sumsize=%lld, sumsize2=%lld, total_size=%lld \n", sumsize, sumsize2, total_size);
@@ -785,6 +539,10 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
             free(out_buf2);
         }
         int ret2 = rename(ofilename2, ofilename);
+        release_vector(&rObj);
+        release_vector(&wObj);
+        pthread_mutex_destroy(&rObj.lock);
+        pthread_mutex_destroy(&wObj.lock);
         printf("call_test: rename: ret2=%d \n", ret2);
         printf("call_test: end free \n");
     }

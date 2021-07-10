@@ -1,8 +1,6 @@
 
 #include "file_rtp.h"
 
-
-
 int file_create_node(FileNode **head0)
 {
     FileNode *head = *head0;
@@ -45,7 +43,7 @@ void file_add_node_by_id(FileNode *head, char *data, int size, int id)
     FileNode *p;
     if(!head)
     {
-        return ret;
+        return;
     }
     p = head;
     do{

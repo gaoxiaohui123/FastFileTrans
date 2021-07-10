@@ -20,6 +20,8 @@ case $Num in
   ./source/file_frame.c \
   ./source/file_pic.c \
   ./source/file_group.c \
+  ./source/file_raw2pkt.c \
+  ./source/file_pkt2raw.c \
   -I./include/ \
   -L./ \
   -L/usr/local/lib \

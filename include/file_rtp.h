@@ -30,6 +30,10 @@ EXTERNC {
 #include <string.h>
 #include <math.h>
 #include <fcntl.h>
+#include <pthread.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #define FILE_PLT 127
 #define FIX_MTU_SIZE 1400
@@ -140,10 +144,10 @@ typedef struct {
     unsigned int data_type : 3;         //1:file start info;2:file end info; 0:raw data
     unsigned int enable_encrypt : 1;    //是否加密
     unsigned int enable_fec : 1;         //是否开启fec
-    unsigned int frame_id : 16;
-    unsigned int group_id : 16;
-    unsigned int pic_id;                //only use for picture
-    unsigned int pkt_idx;
+    unsigned int frame_id : 9; //[0, pic_blks)
+    unsigned int pic_id : 9;                //only use for picture //[0, group_blks)
+    unsigned int group_id : 30; //[0, 2^22)
+    unsigned int pkt_idx;   //[0, 2^32)
     unsigned int rtp_xorcode;           //当前数据块（包括rtp头）异或码
     unsigned int time_stamp0;
     unsigned int time_stamp1;
@@ -167,12 +171,13 @@ typedef struct{
     unsigned int data_type : 3;         //1:file start info;2:file end info; 0:raw data
     unsigned int enable_encrypt : 1;    //是否加密
     unsigned int data_size : 10;        //当前索引数据块大小
-    unsigned int frame_id : 16;
-    unsigned int group_id : 16;
-    unsigned int pic_id;
-    unsigned int pkt_idx;
+    unsigned int frame_id : 9; //[0, pic_blks)
+    unsigned int pic_id : 9;                //only use for picture //[0, group_blks)
+    unsigned int group_id : 30; //[0, 2^22)
+    unsigned int pkt_idx;   //[0, 2^32)
 }CacheHead;
 
+#if 1
 struct FileInfo {
     char *data;
     int size;
@@ -216,60 +221,102 @@ struct GroupInfo {
     struct GroupInfo *next;
 };
 typedef struct GroupInfo GroupNode;
-
+#endif
+typedef struct
+{
+    long long start_time;
+    int sum_size;
+    int bw;
+}BWCount;//Band wide
+typedef struct
+{
+    //经过网络对时校正后的时间(不需要计算rtt,缺点是只知道单向传输延迟)
+    int sum_delay;
+    int num;
+    int net_dealy;
+}NDCount;//Net Delay
+typedef struct
+{
+    //分奇偶段，只统计偶段d
+    long long start_time;
+    int pkt_num;
+    //
+    short last_frame_id;
+    short last_pic_id;
+    int last_group_id;
+    //
+    int loss_rate;
+}LRCount;//lossrate
 typedef struct
 {
     char *data;
     int size;
+    unsigned group_id;
 }PktItem;
 typedef struct
 {
     int max_num;
+    int num : 16;
+    int complete : 2;
+    int complete_num;
     PktItem *pktItem;
 }FrameVector;
 typedef struct
 {
     int max_num;
+    int num;
+    int complete_num;
+    //long long frame_time_stamp;
+    //long long now_time;
     FrameVector *frameVector;
 }PicVector;
-struct GroupVector {
-    //void *sock;//
-    int num;
-    int id;
+typedef struct {
     int max_num;
+    int num;
+    int complete_num;
+    long long start_check_time;
+    long long last_check_time;//防止频繁检测
+    long long frame_time_stamp;
+    long long now_time;
     PicVector *picVector;
-    struct GroupVector *tail;
-    struct GroupVector *next;
-};
-typedef struct GroupVector GroupVectorNode;
+}GroupVector;
 
 typedef struct{
     FileInfo info;
+    pthread_mutex_t lock;
     char *data;
     int data_size;
     unsigned short seq_no;          //block id
-    unsigned int frame_id;
-    unsigned int group_id;          //
+    unsigned int frame_id : 9; //[0, pic_blks)
+    unsigned int pic_id : 9;                //only use for picture //[0, group_blks)
+    unsigned int group_id : 30; //[0, 2^22)
     unsigned int data_xorcode;      //每一块数据的异或值与上一次的异或值的异或码
     unsigned int enable_encrypt;    //是否加密
     unsigned int enable_fec;         //是否开启fec
     unsigned long long snd_size;
-    unsigned int pic_id;
     unsigned int pkt_idx;//4*1024*1024*1024*1024;//4T
+    int last_group_id;//已经处理过的
+    int last_pic_id;////已经处理过的
     long long now_time;
     long long start_time;
     int net_time;
-    GroupNode *head;
-    FrameNode *frameNode;
-    PicNode *picNode;
-    GroupVectorNode *vectorNode;
+    //以下三个参数是相互关联的
+    int cache_size;
+    int max_delay;
+    int bit_rate;
+    //
+    //GroupNode *head;
+    //FrameNode *frameNode;
+    //PicNode *picNode;
+    GroupVector groupVector;
+    BWCount bwCount;
+    LRCount lrCount;
+    NDCount ndCount;
+    char FileHead[512];
+    char FileTail[512];
     FILE *index_fp;
     FILE *raw_fp;
 }FileRtpObj;
-
-
-
-
 
 
 #ifdef __cplusplus
