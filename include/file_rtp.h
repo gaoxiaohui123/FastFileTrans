@@ -154,7 +154,8 @@ typedef struct {
 } FILE_EXTEND_HEADER;
 typedef struct{
     unsigned long long filesize;    //文件大小（maxsize = 4T?）
-    unsigned int block_size : 16;   //mtu size, 默认1100bytes
+    unsigned int min_blk_size : 11; //不能被block_size整除的余数
+    unsigned int block_size : 11;   //mtu size, 默认1100bytes
     unsigned int frame_size : 16;    //default: 256
     unsigned int pic_size : 16;     //pic_size = n * frame_size
     unsigned int group_size : 16;    //default: 64MB
@@ -177,7 +178,7 @@ typedef struct{
     unsigned int pkt_idx;   //[0, 2^32)
 }CacheHead;
 
-#if 1
+#if 0
 struct FileInfo {
     char *data;
     int size;
@@ -268,6 +269,9 @@ typedef struct
     int complete_num;
     //long long frame_time_stamp;
     //long long now_time;
+    char *img;
+    int img_size;
+    short *blk_size;
     FrameVector *frameVector;
 }PicVector;
 typedef struct {

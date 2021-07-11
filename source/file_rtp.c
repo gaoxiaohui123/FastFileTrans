@@ -34,6 +34,7 @@ extern int release_vector(FileRtpObj *obj);
 extern int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize);
 extern int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize);
 
+#if 0
 extern int group_create_node(GroupNode **head0);
 extern void group_add_node(GroupNode *head0, GroupNode **pnew);
 extern void *group_find_node_by_id(GroupNode *head, int id);
@@ -59,7 +60,7 @@ extern void file_add_node(FileNode *head0, FileNode **pnew);
 extern void *file_find_node_by_id(FileNode *head, int id);
 extern void file_delete_node_by_id(FileNode *head, int id);
 extern void file_free_node(FileNode *head);
-
+#endif
 
 #if 1
 #ifdef _WIN32
@@ -227,6 +228,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         memsset(&wObj.lrCount, 0, sizeof(LRCount));
         wObj.lrCount.loss_rate = -1;
         wObj.lrCount.last_check_time = 0;
+        wObj.max_delay = 2000;
         //
         //group_create_node(&rObj.head);
         //group_create_node(&wObj.head);
@@ -246,6 +248,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         int frame_blks = 256;
         rObj.info.frame_size = frame_blks;
         int frame_size = frame_blks * mtu_size;
+        rObj.info.min_blk_size = mtu_size;
         //
         if(img_size > 0)
         {
@@ -253,6 +256,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
             frame_blks = frame_size / mtu_size + ((frame_size % mtu_size) != 0);
             frame_size = frame_size > 256 ? 256 : frame_size;
             rObj.info.frame_size = frame_blks;
+            rObj.info.min_blk_size = frame_size % mtu_size;
         }
         //
         rObj.info.frame_num = (total_size / frame_size) + ((total_size % frame_size) != 0);
@@ -364,11 +368,20 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                     //printf("call_test: file_packet: ret=%d \n", ret);
                     wObj.data = out_buf;
                     wObj.data_size = ret;//rObj.data_size;
-                    ret = file_unpacket(&wObj, out_buf2, out_size2, oSize);
+                    //ret = file_unpacket(&wObj, out_buf2, out_size2, oSize);
                     //printf("call_test: file_unpacket: ret=%d \n", ret);
                     //
                     time0 = api_get_sys_time(0);
-                    ret = pkt2file(idxfp, wfp, out_buf2, ret, oSize, &pkt_idx);
+                    //ret = pkt2file(idxfp, wfp, out_buf2, ret, oSize, &pkt_idx);
+                    int offset2 = 0;
+                    int l = 0;
+                    ret = 0;
+                    while(offset2 < out_size)
+                    {
+                        ret += pkt2cache(&wObj, &out_buf[offset2], rtpSize[l]);
+                        offset2 += rtpSize[l];
+                    }
+
                     time1 = api_get_sys_time(0);
                     difftime = (int)(time1 - time0);
                     if(difftime > 10)
@@ -377,8 +390,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                     //printf("call_test: pkt2file: ret=%d \n", ret);
                     if(sumsize != sumsize2)
                     {
-                        printf("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
-                        printf("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
+                        MYPRINT("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
+                        MYPRINT("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
                     }
                     //frame_add_node(picNode->head, &frameNode);
                     rObj.frame_id++;

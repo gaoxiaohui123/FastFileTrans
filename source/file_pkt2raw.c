@@ -1,6 +1,18 @@
 
 #include "file_rtp.h"
 
+int my_fwrite(FILE *fp, char *data, int size, char *func_name)
+{
+    int ret = fwrite(data, 1, size, fp);
+    if(ret != size)
+    {
+        char text[512] = "error: my_fwrite: \n"
+        strcat(text, func_name);
+        strcat(text, ": ret=%d, size=%d \n");
+        MYPRINT2(text, ret, size);
+    }
+    return ret;
+}
 int create_vector(FileRtpObj *obj)
 {
     int ret = 0;
@@ -24,6 +36,53 @@ int create_vector(FileRtpObj *obj)
             p2->pktItem = (PktItem *)calloc(1, frame_size * sizeof(PktItem));
             ret += frame_size * sizeof(PktItem);
         }
+    }
+    return ret;
+}
+int free_picture(FileRtpObj *obj, PicVector *p1)
+{
+    int ret = 0;
+    unsigned int frame_size = obj->info.frame_size;//256
+    unsigned int pic_size = obj->info.pic_size;//12
+    if(p1->frameVector)
+    {
+        ret += pic_size * sizeof(FrameVector);
+        for(int j = 0; j < pic_size; j++)
+        {
+            FrameVector *p2 = &p1->frameVector[j];
+            if(p2->pktItem)
+            {
+                ret += frame_size * sizeof(PktItem);
+                for(int k = 0; k < frame_size; k++)
+                {
+                    PktItem *p3 = (PktItem *)&p2->pktItem[k];
+                    if(p3->data)
+                    {
+                        ret += p3->size;
+                        free(p3->data);
+                        p3->data = NULL;
+                        p3->size = 0;
+                    }
+                }//k
+                //free(p2->pktItem);
+                //p2->pktItem = NULL;
+                //p2->max_num = 0;
+            }
+        }//j
+        if(p1->img)
+        {
+            free(p1->img);
+            p1->img = NULL;
+        }
+        if(p1->blk_size)
+        {
+            free(p1->blk_size);
+            p1->blk_size = NULL;
+        }
+        p1->img_size = 0;
+        //free(p1->frameVector);
+        //p1->frameVector = NULL;
+        //p1->max_num = 0;
     }
     return ret;
 }
@@ -65,6 +124,17 @@ int release_vector(FileRtpObj *obj)
                         p2->max_num = 0;
                     }
                 }//j
+                if(p1->img)
+                {
+                    free(p1->img);
+                    p1->img = NULL;
+                }
+                if(p1->blk_size)
+                {
+                    free(p1->blk_size);
+                    p1->blk_size = NULL;
+                }
+                p1->img_size = 0;
                 free(p1->frameVector);
                 p1->frameVector = NULL;
                 p1->max_num = 0;
@@ -107,10 +177,173 @@ int fec_decode(FileRtpObj *obj)
 
     return ret;
 }
-int get_picture(FileRtpObj *obj)
+
+int picture2render(FileRtpObj *obj, PicVector *p1)
 {
     int ret = 0;
-
+    free_picture(obj, p1);
+    return ret;
+}
+int get_picture(FileRtpObj *obj, PicVector *p1)
+{
+    int ret = 0;
+    if(p1->img)
+    {
+        free(p1->img);
+        p1->img_size;
+    }
+    p1->img_size = obj.info.pic_size * obj.info.frame_size * (obj.info.block_size + sizeof(CacheHead));
+    p1->blk_size = (short *)calloc(1, (obj.info.pic_size * obj.info.frame_size) * sizeof(short));
+    p1->img = (char *)calloc(1, p1->img_size * sizeof(char));
+    //file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
+    char pnull[2048] = {0};
+    FILE *index_fp = obj->index_fp;
+    FILE *raw_fp = obj->raw_fp;
+    int rtp_header_size = sizeof(RTP_FIXED_HEADER);
+    int ext_size = sizeof(FILE_EXTEND_HEADER);
+    int rtp_extend_length = (sizeof(FILE_EXTEND_HEADER) >> 2) - 1;
+    int block_size = obj.info.block_size;
+    int mtu_size = obj.info.block_size;
+    int min_blk_size = obj.info.min_blk_size;
+    int offset = 0;
+    char *out_buf = p1->img;
+    short *blk_size = p1->blk_size;
+    int enable_fec = 0;
+    int i = 0;
+    for(int j = 0; j < p1->max_num; j++)
+    {
+        int frame_id = j;
+        FrameVector *p2 = &p1->frameVector[frame_id];
+        for(int k = 0; k < p2->max_num; k++)
+        {
+            PktItem *p3 = (PktItem *)&p2->pktItem[k];
+            int lost = 0;
+            int is_last_blk = (j == (p1->max_num - 1)) && (k == (p2->max_num - 1));
+            if(enable_fec)
+            {
+                //
+            }
+            if(p3->size > 0 && p3->data)
+            {
+                char *src_ptr = (char *)p3->data;
+                RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)&src_ptr[0];
+                FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&src_ptr[rtp_header_size];
+                char *payload_ptr = (char *)&src_ptr[rtp_header_size + ext_size];
+                //
+                int flag = 1;
+                flag &= rtp_hdr->payload     == FILE_PLT;  //负载类型号，									PT
+                flag &= rtp_hdr->version     == 2;  //版本号，此版本固定为2								V
+                flag &= rtp_hdr->padding	 == 0;//														P
+                flag &= rtp_hdr->csrc_len	 == 0;//														CC
+                flag &= rtp_hdr->marker		 == 0;//(size >= len);   //标志位，由具体协议规定其值。		M
+                //rtp_hdr->ssrc        = ssrc;//(unsigned int)svc_nalu;;//htonl(10);    //随机指定为10，并且在本RTP会话中全局唯一	SSRC
+                flag &= rtp_hdr->extension	 == 1;//														X
+                //rtp_hdr->timestamp   = 0;//?
+                //printf("file_unpacket: rtp_hdr->payload=%d \n", rtp_hdr->payload);
+                //printf("file_unpacket: flag=%d \n", flag);
+                if(flag)
+                {
+                    unsigned short seq_no = rtp_hdr->seq_no;
+                    //
+                    unsigned short extprofile = rtp_ext->rtp_extend_profile;// & 7;
+                    unsigned short rtp_extend_length = rtp_ext->rtp_extend_length;
+                    rtp_extend_length = ((rtp_extend_length & 0xFF) << 8) | ((rtp_extend_length >> 8));
+                    unsigned short extlen = (rtp_extend_length + 1) << 2;
+                    unsigned short rtp_pkt_size = rtp_ext->rtp_pkt_size;
+                    unsigned short this_pkt_size = rtp_pkt_size + extlen + rtp_header_size;
+                    //printf("file_unpacket: this_pkt_size=%d, pkt_size=%d, extlen=%d, ext_size=%d \n", this_pkt_size, pkt_size, extlen, ext_size);
+                    if(this_pkt_size == pkt_size && extlen == ext_size)
+                    {
+                        enable_fec = rtp_ext->enable_fec;
+                        long long time_stamp0 = rtp_ext->time_stamp0;
+	                    long long time_stamp1 = rtp_ext->time_stamp1;
+	                    long long packet_time_stamp = time_stamp0 | (time_stamp1 << 32);
+	                    if(!obj->net_time)
+	                    {
+	                        //与对端进行时间对准
+	                        obj->net_time = now_time - packet_time_stamp;
+	                    }
+                        char *dst_ptr = (char *)&out_buf[offset];
+                        CacheHead *dst_head = (CacheHead *)dst_ptr;
+                        char *dst_payload = (char *)&dst_ptr[sizeof(CacheHead)];
+                        unsigned short dst_pkt_size = rtp_pkt_size + sizeof(CacheHead);
+                        memcpy((void *)dst_payload, payload_ptr, rtp_pkt_size);
+                        dst_head->rtp_pkt_size = rtp_ext->rtp_pkt_size;// + sizeof(CacheHead);
+                        dst_head->data_type = rtp_ext->data_type;
+                        dst_head->enable_encrypt = rtp_ext->enable_encrypt;
+                        dst_head->frame_id = rtp_ext->frame_id;
+                        dst_head->pic_id = rtp_ext->pic_id;
+                        dst_head->group_id = rtp_ext->group_id;
+                        dst_head->pkt_idx = rtp_ext->pkt_idx;
+                        //
+                        offset += (int)dst_pkt_size;
+                        blk_size[i] = dst_pkt_size;
+                        if(index_fp)
+                        {
+                            my_fwrite(index_fp, dst_head, sizeof(CacheHead), "get_picture");
+                        }
+                        if(raw_fp)
+                        {
+                            my_fwrite(raw_fp, dst_payload, rtp_pkt_size, "get_picture");
+                        }
+                        //printf("file_unpacket: offset2=%d, i=%d \n", offset2, i);
+                        i++;
+                    }
+                }//flag
+            }
+            else
+            {
+                lost = 1;
+            }
+            if(lost)
+            {
+                if(raw_fp)
+                {
+                    if(is_last_blk)
+                    {
+                        block_size = min_blk_size;
+                    }
+                    my_fwrite(raw_fp, pnull, block_size, "get_picture");
+                }
+            }
+        }//k
+    }//j
+    ret = offset;
+    picture2render(obj, p1)//test
+    return ret;
+}
+int get_picture_all(FileRtpObj *obj)
+{
+    int ret = 0;int max_delay = obj.max_delay;
+    GroupVector *p0 = &obj->groupVector;
+    last_frame_id = obj->lrCount.last_frame_id;
+    last_pic_id = obj->lrCount.last_pic_id;//主要检测对象(以帧为单元)
+    last_group_id = obj->lrCount.last_group_id;
+    int start_id = last_pic_id + 1;
+    start_id = (!last_group_id && !last_pic_id && !last_frame_id) ? 0 : start_id;
+    int i = start_id;
+    int j = 0;
+    int pic_id = i % p0->max_num;
+    PicVector *p1 = &p0->picVector[pic_id];
+    get_picture(obj, p1);
+    long long packet_time_stamp0 = p1->frame_time_stamp;
+    long long now_time0 = p1->now_time;
+    i++; j++;
+    while(1)
+    {
+        pic_id = i % p0->max_num;
+        p1 = &p0->picVector[pic_id];
+        long long packet_time_stamp1 = p1->frame_time_stamp;
+        long long now_time1 = p1->now_time;
+        int delay_time0 = (int)(packet_time_stamp1 - packet_time_stamp0);
+        int delay_time1 = (int)(now_time1 - now_time0);
+        if(delay_time0 >= (max_delay >> 1) || j >= p0->max_num)
+        {
+            break;
+        }
+        get_picture(obj, p1);
+        i++; j++;
+    }//while
     return ret;
 }
 int count_net_delay(FileRtpObj *obj, int pkt_time)
@@ -141,7 +374,7 @@ int get_rtx(FileRtpObj *obj, int start, int end)
         PicVector *p1 = &p0->picVector[pic_id];
         if(p1->complete_num >= p1->max_num)
         {
-            //get_picture(obj);
+            //get_picture(obj, p1);
         }
         else{
             for(int j = 0; j < p1->max_num; j++)
@@ -164,7 +397,6 @@ int get_rtx(FileRtpObj *obj, int start, int end)
                     }
                 }
             }
-
         }
     }
 
@@ -176,6 +408,7 @@ int get_rtx(FileRtpObj *obj, int start, int end)
 int count_lossrate(FileRtpObj *obj, long long now_time)
 {
     int ret = -1;
+    int max_delay = obj.max_delay;
     GroupVector *p0 = &obj->groupVector;
     long long start_time = obj->lrCount.start_time;
     if(!start_time)
@@ -186,7 +419,7 @@ int count_lossrate(FileRtpObj *obj, long long now_time)
     {
         long long start_time = obj->lrCount.start_time;
         int difftime = (int)(now_time - start_time);
-        if(difftime >= 2000)//obj->max_delay
+        if(difftime >= max_delay)//obj->max_delay
         {
             last_frame_id = obj->lrCount.last_frame_id;
             last_pic_id = obj->lrCount.last_pic_id;//主要检测对象(以帧为单元)
@@ -204,14 +437,14 @@ int count_lossrate(FileRtpObj *obj, long long now_time)
             if(start_check_time)
             {
                 difftime = (int)(now_time - start_check_time);
-                if(difftime >= 1000)
+                if(difftime >= (max_delay >> 1))
                 {
-                    return get_picture(obj);
+                    return get_picture_all(obj);
                 }
                 long long last_check_time = pstart->last_check_time;
                 difftime = (int)(now_time - last_check_time);
                 int net_dealy = obj->ndCount.net_dealy;
-                if(net_dealy > 1000)
+                if(net_dealy > (max_delay >> 1))
                 {
                     printf("warning: count_lossrate: net_dealy=%d \n", net_dealy);
 
@@ -239,9 +472,9 @@ int count_lossrate(FileRtpObj *obj, long long now_time)
                     long long now_time1 = p1->now_time;
                     int delay_time0 = (int)(packet_time_stamp1 - packet_time_stamp0);
                     int delay_time1 = (int)(now_time1 - now_time0);
-                    if(delay_time0 >= 1000 || j >= p0->max_num)
+                    if(delay_time0 >= (max_delay >> 1) || j >= p0->max_num)
                     {
-                        if(delay_time0 >= 1000)
+                        if(delay_time0 >= (max_delay >> 1))
                         {
                             if(!pstart->start_check_time)
                             {
@@ -260,7 +493,6 @@ int count_lossrate(FileRtpObj *obj, long long now_time)
 
     return ret;
 }
-
 
 int pkt2cache(FileRtpObj *obj, char *data, int size)
 {
@@ -357,7 +589,7 @@ int pkt2cache(FileRtpObj *obj, char *data, int size)
                         //获取帧
                         if(p1->complete_num >= p1->max_num)
                         {
-                            get_picture(obj);
+                            get_picture(obj, p1);
                         }
                         //丢包统计
                         count_lossrate(obj);
@@ -366,11 +598,17 @@ int pkt2cache(FileRtpObj *obj, char *data, int size)
                 }
                 pthread_mutex_unlock(&obj->lock);
                 //unlock
+                ret = payload_size;//in case of fec and rtx
             }
             else if(data_type == 1)
             {
                 memcpy((void *)&obj->info, payload_ptr, sizeof(FileInfo));
                 create_vector(obj);
+                FILE *index_fp = obj->index_fp;
+                if(index_fp)
+                {
+                    my_fwrite(index_fp, dst_head, sizeof(CacheHead), "pkt2cache");
+                }
             }
             else if(data_type == 2)
             {
@@ -378,10 +616,11 @@ int pkt2cache(FileRtpObj *obj, char *data, int size)
                 memcpy((void *)&info, payload_ptr, sizeof(FileInfo));
             }
         }
-
     }
+
     return ret;
 }
+#if 0
 int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
 {
     int ret = 0;
@@ -477,3 +716,4 @@ int file_unpacket(FileRtpObj *obj, char *out_buf, int out_size, short *oSize)
     MYPRINT("file_unpacket: ret=%d \n", ret);
     return ret;
 }
+#endif

@@ -16,10 +16,6 @@ case $Num in
   -Wno-pointer-to-int-cast \
   -Wno-discarded-qualifiers \
   ./source/file_rtp.c \
-  ./source/file_list.c \
-  ./source/file_frame.c \
-  ./source/file_pic.c \
-  ./source/file_group.c \
   ./source/file_raw2pkt.c \
   ./source/file_pkt2raw.c \
   -I./include/ \
