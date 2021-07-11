@@ -97,10 +97,11 @@ gload = LoadLib()
 def TestLocal():
     start_time = time.time()
     ifilename = '/home/gxh/works/datashare/InToTree_1920x1080.yuv'
-    ifilename = '/home/gxh/works/InToTree_1920x1080_0.yuv'
+    #ifilename = '/home/gxh/works/InToTree_1920x1080_0.yuv'
     ofilename = '/home/gxh/works/InToTree_1920x1080.yuv'
     idxfilename = '/home/gxh/works/InToTree_1920x1080.idx'
-    ret = gload.lib.call_test(ifilename.encode('utf-8'), ofilename.encode('utf-8'), idxfilename.encode('utf-8'), 0)
+    img_size = (1920 * 1080 * 3) >> 1
+    ret = gload.lib.call_test(ifilename.encode('utf-8'), ofilename.encode('utf-8'), idxfilename.encode('utf-8'), img_size)
     end_time = time.time()
     difftime = int((end_time - start_time) * 1000)
     t0 = difftime / 1000

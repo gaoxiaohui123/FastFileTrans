@@ -59,9 +59,6 @@ EXTERNC {
 #define MAX_PKT_NUM (1 << 10) //1024//2048 //1024
 #define MAX_FEC_PKT_NUM (1 << 14) //丢包率到达90%,会导致包数增加10倍以上
 
-
-
-
 //#define PRINT_LEVEL     1
 
 #ifdef PRINT_LEVEL
@@ -272,16 +269,19 @@ typedef struct
     char *img;
     int img_size;
     short *blk_size;
+
+
+    long long start_check_time;
+    long long last_check_time;//防止频繁检测
+    long long frame_time_stamp;
+    long long now_time;
+
     FrameVector *frameVector;
 }PicVector;
 typedef struct {
     int max_num;
     int num;
     int complete_num;
-    long long start_check_time;
-    long long last_check_time;//防止频繁检测
-    long long frame_time_stamp;
-    long long now_time;
     PicVector *picVector;
 }GroupVector;
 

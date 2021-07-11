@@ -224,10 +224,10 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         pthread_mutex_init(&wObj.lock,NULL);
         wObj.last_group_id = -1;//已经处理过的
         wObj.last_pic_id = -1;////已经处理过的
-        memsset(&wObj.bwCount, 0, sizeof(BWCount));
-        memsset(&wObj.lrCount, 0, sizeof(LRCount));
+        memset(&wObj.bwCount, 0, sizeof(BWCount));
+        memset(&wObj.lrCount, 0, sizeof(LRCount));
         wObj.lrCount.loss_rate = -1;
-        wObj.lrCount.last_check_time = 0;
+        //wObj.lrCount.last_check_time = 0;
         wObj.max_delay = 2000;
         //
         //group_create_node(&rObj.head);
@@ -365,7 +365,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                     //
                     //int ret = file_packet(&rObj, out_buf, out_size, rtpSize);
                     int ret = raw2pkt(&rObj, out_buf, out_size, rtpSize);
-                    //printf("call_test: file_packet: ret=%d \n", ret);
+                    MYPRINT2("call_test: file_packet: ret=%d \n", ret);
                     wObj.data = out_buf;
                     wObj.data_size = ret;//rObj.data_size;
                     //ret = file_unpacket(&wObj, out_buf2, out_size2, oSize);
@@ -378,8 +378,13 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                     ret = 0;
                     while(offset2 < out_size)
                     {
-                        ret += pkt2cache(&wObj, &out_buf[offset2], rtpSize[l]);
-                        offset2 += rtpSize[l];
+                        if(rtpSize[l] > 0)
+                        {
+                            ret += pkt2cache(&wObj, &out_buf[offset2], rtpSize[l]);
+                            offset2 += rtpSize[l];
+                            MYPRINT2("call_test: rtpSize[l]=%d, l=%d \n", rtpSize[l], l);
+                        }
+                        l++;
                     }
 
                     time1 = api_get_sys_time(0);
@@ -390,8 +395,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                     //printf("call_test: pkt2file: ret=%d \n", ret);
                     if(sumsize != sumsize2)
                     {
-                        MYPRINT("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
-                        MYPRINT("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
+                        MYPRINT2("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
+                        MYPRINT2("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
                     }
                     //frame_add_node(picNode->head, &frameNode);
                     rObj.frame_id++;

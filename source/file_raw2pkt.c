@@ -190,7 +190,7 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     //obj->frame_id++;
     obj->seq_no = seq_no;
     ret = offset2;
-    MYPRINT("raw2pkt: ret=%d \n", ret);
+    MYPRINT2("raw2pkt: ret=%d \n", ret);
     return ret;
 }
 
