@@ -10,6 +10,7 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     MYPRINT("file_packet: start \n");
     //FrameNode *frameNode = obj->frameNode;
     FileInfo *info = &obj->info;
+    int mtu_size = info->block_size;
     char *data = obj->data;
     int data_size = obj->data_size;
     unsigned short seq_no = obj->seq_no;
@@ -18,7 +19,7 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     unsigned int group_id = obj->group_id;
     unsigned int data_xorcode = obj->data_xorcode;
 
-    unsigned long long filesize = info->filesize;    //文件大小（maxsize = 4T?）
+    uint64_t filesize = info->filesize;    //文件大小（maxsize = 4T?）
     unsigned int block_size = info->block_size;   //mtu size, 默认1100bytes
     unsigned int block_num = info->block_num;         //block 个数 = filesize / block_size
     unsigned int file_xorcode = info->file_xorcode;      //文件异或码（文件首个64MBytes）
@@ -31,7 +32,7 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     int offset2  = 0;
     int i = 0;
     //printf("file_packet: data_size=%d \n", data_size);
-    long long now_time = api_get_sys_time(0);
+    int64_t now_time = api_get_sys_time(0);
     while(offset < data_size)
     {
         int flag = !seq_no && !frame_id && !pic_id && !group_id;
@@ -84,7 +85,10 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
         else{
             int tail = data_size - offset;
             int payload_size = tail >= block_size ? block_size : tail;
-
+            if(payload_size != mtu_size)
+            {
+                MYPRINT2("tail: raw2pkt: payload_size=%d \n", payload_size);
+            }
             rtp_ext->rtp_extend_profile = EXTEND_PROFILE_ID;
             rtp_ext->rtp_extend_length = ((rtp_extend_length & 0xFF) << 8) | ((rtp_extend_length >> 8));
             rtp_ext->rtp_pkt_size = payload_size;         //当前rtp包大小
@@ -190,7 +194,7 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     //obj->frame_id++;
     obj->seq_no = seq_no;
     ret = offset2;
-    MYPRINT2("raw2pkt: ret=%d \n", ret);
+    MYPRINT("raw2pkt: i=%d, ret=%d \n", i, ret);
     return ret;
 }
 

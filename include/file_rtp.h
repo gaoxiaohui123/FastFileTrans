@@ -35,6 +35,14 @@ EXTERNC {
 #include <windows.h>
 #endif
 
+#ifndef false
+#define false   (0)
+#endif
+
+#ifndef true
+#define true    (!false)
+#endif
+
 #define FILE_PLT 127
 #define FIX_MTU_SIZE 1400
 #define MTU_SIZE 1100
@@ -43,11 +51,11 @@ EXTERNC {
 
 
 #define MAX_PKT_BUF_SIZE (1 << 16) //utility_server.c
-#define LEFT_SHIFT32 ((long long)1 << 32) //注意类型，防止当成负数
-#define HALF_UINT ((long long)1 << 31)
-#define QUART_UINT ((long long)1 << 30)
+#define LEFT_SHIFT32 ((int64_t)1 << 32) //注意类型，防止当成负数
+#define HALF_UINT ((int64_t)1 << 31)
+#define QUART_UINT ((int64_t)1 << 30)
 #define HALF_QUART_UINT (HALF_UINT + QUART_UINT) //注意类型，防止当成负数
-#define MAX_UINT    (((long long)1 << 32) - 1)
+#define MAX_UINT    (((int64_t)1 << 32) - 1)
 #define LEFT_SHIFT16 ((int)1 << 16)
 #define MAX_USHORT (((int)1 << 16) - 1)
 #define HALF_USHORT ((int)1 << 15)
@@ -150,7 +158,7 @@ typedef struct {
     unsigned int time_stamp1;
 } FILE_EXTEND_HEADER;
 typedef struct{
-    unsigned long long filesize;    //文件大小（maxsize = 4T?）
+    uint64_t filesize;    //文件大小（maxsize = 4T?）
     unsigned int min_blk_size : 11; //不能被block_size整除的余数
     unsigned int block_size : 11;   //mtu size, 默认1100bytes
     unsigned int frame_size : 16;    //default: 256
@@ -160,6 +168,7 @@ typedef struct{
     unsigned int frame_num;
     unsigned int pic_num;
     unsigned int group_num;
+    unsigned int img_size;
     unsigned int file_xorcode;      //文件异或码（文件首个64MBytes）
     unsigned char filename[256];    //文件名
 }FileInfo;
@@ -222,7 +231,7 @@ typedef struct GroupInfo GroupNode;
 #endif
 typedef struct
 {
-    long long start_time;
+    int64_t start_time;
     int sum_size;
     int bw;
 }BWCount;//Band wide
@@ -236,7 +245,7 @@ typedef struct
 typedef struct
 {
     //分奇偶段，只统计偶段d
-    long long start_time;
+    int64_t start_time;
     int pkt_num;
     //
     short last_frame_id;
@@ -264,17 +273,17 @@ typedef struct
     int max_num;
     int num;
     int complete_num;
-    //long long frame_time_stamp;
-    //long long now_time;
+    //int64_t frame_time_stamp;
+    //int64_t now_time;
     char *img;
     int img_size;
-    short *blk_size;
+    //short *p_blk_size;
 
 
-    long long start_check_time;
-    long long last_check_time;//防止频繁检测
-    long long frame_time_stamp;
-    long long now_time;
+    int64_t start_check_time;
+    int64_t last_check_time;//防止频繁检测
+    int64_t frame_time_stamp;
+    int64_t now_time;
 
     FrameVector *frameVector;
 }PicVector;
@@ -297,12 +306,12 @@ typedef struct{
     unsigned int data_xorcode;      //每一块数据的异或值与上一次的异或值的异或码
     unsigned int enable_encrypt;    //是否加密
     unsigned int enable_fec;         //是否开启fec
-    unsigned long long snd_size;
+    uint64_t snd_size;
     unsigned int pkt_idx;//4*1024*1024*1024*1024;//4T
     int last_group_id;//已经处理过的
     int last_pic_id;////已经处理过的
-    long long now_time;
-    long long start_time;
+    int64_t now_time;
+    int64_t start_time;
     int net_time;
     //以下三个参数是相互关联的
     int cache_size;

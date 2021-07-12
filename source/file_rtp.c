@@ -74,7 +74,7 @@ int64_t get_sys_time()
 	//...process
 	//gettimeofday(&tEnd, NULL);
 	//long deltaTime = 1000000L * (tEnd.tv_sec - tBegin.tv_sec) + (tEnd.tv_usec - tBegin.tv_usec);
-	long long time = (1000000L * (long long)tBegin.tv_sec + tBegin.tv_usec) / 1000;//us-->ms
+	int64_t time = (1000000L * (int64_t)tBegin.tv_sec + tBegin.tv_usec) / 1000;//us-->ms
     return time;
 }
 #else
@@ -87,14 +87,14 @@ int64_t get_sys_time()
 	//...process
 	//gettimeofday(&tEnd, NULL);
 	//long deltaTime = 1000000L * (tEnd.tv_sec - tBegin.tv_sec) + (tEnd.tv_usec - tBegin.tv_usec);
-	long long time = (1000000L * tBegin.tv_sec + tBegin.tv_usec) / 1000;//us-->ms
+	int64_t time = (1000000L * tBegin.tv_sec + tBegin.tv_usec) / 1000;//us-->ms
     return time;
 }
 #endif
 FQT_API
-long long api_get_sys_time(int delay)
+int64_t api_get_sys_time(int delay)
 {
-    long long ret = get_sys_time();
+    int64_t ret = get_sys_time();
     if(delay)
     {
         ret += delay;
@@ -103,6 +103,26 @@ long long api_get_sys_time(int delay)
 }
 
 #endif
+void paced_send(int64_t bitrate, int sendDataLen, int difftime, int64_t sumbytes)
+{
+    int usedtime = difftime * 1000;//us
+    //int64_t bitrate = 1 * 1024 * 1024 * 1024;//bps
+    int64_t sendbits = sendDataLen << 3;
+    int64_t pretime = (sendbits * 1000000) / bitrate; //us
+    int64_t sumbits = sumbytes << 3;
+    int64_t sumpretime = (sumbits * 1000000) / bitrate;
+    //MYPRINT("PacedSend: sumpretime=%lld \n", sumpretime);
+    int tailtime = (int)(sumpretime - usedtime); // us
+    //MYPRINT("PacedSend: tailtime=%d \n", tailtime);
+    int waittime = (int)(tailtime + pretime); //us
+    //MYPRINT("PacedSend: waittime=%d \n", waittime);
+    //waittime = pretime #test
+    if(waittime > 0)
+    {
+        //MYPRINT("PacedSend: waittime=%d (us) \n", waittime);
+        usleep(waittime);
+    }
+}
 
 int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, int size, short *pkt_size, unsigned int *p_pkt_idx)
 {
@@ -131,7 +151,7 @@ int pkt2file(FILE *idxfp, FILE * fp, char *pkt_buf, int size, short *pkt_size, u
         {
             int data_size = head_size;
             //空缺块填0
-            long long loss_num = ((long long)pkt_idx - (long long)last_pkt_idx) - 1;
+            int64_t loss_num = ((int64_t)pkt_idx - (int64_t)last_pkt_idx) - 1;
             if(loss_num > 0)
             {
                 printf("pkt2file: loss_num=%d, i=%d vvvvvvvvvvvvvvv \n", loss_num, i);
@@ -216,6 +236,18 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
     if(rfp && wfp && idxfp)
     {
         printf("call_test: start 2 \n");
+#if 1
+        if(wfp)
+        {
+            fclose(wfp);
+            wfp = NULL;
+        }
+        if(idxfp)
+        {
+            fclose(idxfp);
+            idxfp = NULL;
+        }
+#endif
         //return;
         FileRtpObj rObj = {};
         FileRtpObj wObj = {};
@@ -229,6 +261,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         wObj.lrCount.loss_rate = -1;
         //wObj.lrCount.last_check_time = 0;
         wObj.max_delay = 2000;
+        wObj.index_fp = idxfp;
+        wObj.raw_fp = wfp;
         //
         //group_create_node(&rObj.head);
         //group_create_node(&wObj.head);
@@ -236,15 +270,19 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         create_vector(&wObj);
         //
         fseek(rfp, 0, SEEK_END);
-        long long total_size = ftell(rfp);
+        int64_t total_size = ftell(rfp);
         printf("call_test: total_size=%d \n", total_size);
         rewind(rfp);
         //
         int mtu_size = 1100;
+        int min_blk_size = mtu_size;
         rObj.info.filesize = total_size;    //文件大小（maxsize = 4T?）
         rObj.info.block_size = mtu_size;   //mtu size, 默认1100bytes
         rObj.info.block_num = (total_size / mtu_size) + ((total_size % mtu_size) != 0);         //block 个数 = filesize / block_size
-
+        if(!img_size)
+        {
+            img_size = 256 * 12 * mtu_size;//test
+        }
         int frame_blks = 256;
         rObj.info.frame_size = frame_blks;
         int frame_size = frame_blks * mtu_size;
@@ -252,11 +290,15 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         //
         if(img_size > 0)
         {
-            frame_size = img_size;//(1920 * 1080 * 3) / 2;
-            frame_blks = frame_size / mtu_size + ((frame_size % mtu_size) != 0);
-            frame_size = frame_size > 256 ? 256 : frame_size;
+            //img_size;//(1920 * 1080 * 3) / 2;
+            frame_blks = img_size / mtu_size + ((img_size % mtu_size) != 0);
+            frame_blks = frame_blks > 256 ? 256 : frame_blks;
+            frame_size = frame_blks * mtu_size;
             rObj.info.frame_size = frame_blks;
-            rObj.info.min_blk_size = frame_size % mtu_size;
+            min_blk_size = img_size % mtu_size;
+            rObj.info.min_blk_size = img_size % mtu_size;
+            rObj.info.img_size = img_size;
+            MYPRINT2("call_test: frame_blks=%d \n", frame_blks);
         }
         //
         rObj.info.frame_num = (total_size / frame_size) + ((total_size % frame_size) != 0);
@@ -267,9 +309,12 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         //
         if(img_size > 0)
         {
-            pic_size = img_size;//(1920 * 1080 * 3) / 2;
-            pic_blks = pic_size / frame_size + ((pic_size % frame_size) != 0);
+            //pic_size = img_size;//(1920 * 1080 * 3) / 2;
+            pic_blks = img_size / frame_size + ((img_size % frame_size) != 0);
             rObj.info.pic_size = pic_blks;
+            pic_size = pic_blks * frame_size;
+            rObj.info.img_size = img_size;
+            MYPRINT2("call_test: pic_blks=%d \n", pic_blks);
         }
         //
         rObj.info.pic_num = (total_size / pic_size) + ((total_size % pic_size) != 0);
@@ -277,29 +322,31 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         int group_blks = 256;//默认:256*12*256*1100 = 825MB;调节内存占用大小
         rObj.info.group_size = group_blks;
         int group_size = group_blks * pic_size;
-        if(rObj.cache_size > 0)
-        {
-            group_size = rObj.cache_size;//(1920 * 1080 * 3) / 2;
-            group_blks = group_size / pic_size + ((group_size % pic_size) != 0);
-            rObj.info.group_size = group_blks;
-        }
-        rObj.info.group_num = (total_size / pic_size) + ((total_size % pic_size) != 0);
 
-        char *ptr = calloc(1, frame_size);
-        rObj.data = ptr;
-        int out_size = (frame_blks * (mtu_size + 100));
+        group_size = rObj.cache_size;//(1920 * 1080 * 3) / 2;
+        group_blks = group_size / pic_size + ((group_size % pic_size) != 0);
+        rObj.info.group_size = group_blks;
+        MYPRINT2("call_test: group_blks=%d \n", group_blks);
+
+        rObj.info.group_num = (total_size / pic_size) + ((total_size % pic_size) != 0);
+        MYPRINT2("call_test: rObj.info.group_num=%d \n", rObj.info.group_num);
+
+        char *read_buf = calloc(1, rObj.cache_size * sizeof(char));
+        rObj.data = read_buf;
+        int max_buf_size = (frame_blks + 1) * (mtu_size + 100);
+        int out_size = max_buf_size;
         char *out_buf = calloc(1, out_size);
         short *rtpSize = calloc(1, (frame_blks + 1) * sizeof(short));
 
-        int out_size2 = (frame_blks * (mtu_size + 100));
+        int out_size2 = max_buf_size;
         char *out_buf2 = calloc(1, out_size);
         short *oSize = rtpSize;// calloc(1, (frame_blks + 1) * sizeof(short));
 
         rObj.info.file_xorcode = 0;      //文件异或码（文件首个64MBytes）
         strcpy(rObj.info.filename, ifilename);    //去除路径的文件名
         //
-        long long sumsize = 0;
-        long long sumsize2 = 0;
+        int64_t sumsize = 0;
+        int64_t sumsize2 = 0;
         int status = 0;
         int k = 0;
         unsigned int pkt_idx = 0;
@@ -316,6 +363,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         //
         printf("call_test: total_size=%d \n", total_size);
         //
+        int offset = 0;
         while((sumsize < total_size) && !status)
         {
             //group: 256 * 256 * 1100 > 64MB
@@ -334,6 +382,27 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                 rObj.frame_id = 0;
                 //PicNode *picNode = (PicNode *)calloc(1, sizeof(PicNode));
                 //frame_create_node(&picNode->head);
+                int offset1 = 0;
+                int64_t time0 = api_get_sys_time(0);
+                if((offset + img_size) > rObj.cache_size)
+                {
+                    MYPRINT2("call_test: offset=%d, k=%d, i=%d \n", offset, k, i);
+                    offset = 0;
+                    status = 1;//test
+                }
+                int rsize = fread(&read_buf[offset], 1, img_size, rfp);
+                if(rsize != img_size)
+                {
+                    printf("call_test: rsize=%d, ######## \n", rsize);
+                    status = 1;
+                }
+                sumsize += rsize;
+
+                int64_t time1 = api_get_sys_time(0);
+                int difftime = (int)(time1 - time0);
+                if(difftime > 10)
+                    MYPRINT("call_test: read: difftime=%d (ms) \n", difftime);
+
                 for(int j = 0; j < rObj.info.pic_size; j++)
                 {
                     if(status)
@@ -343,31 +412,23 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                     //FrameNode *frameNode = (FrameNode *)calloc(1, sizeof(FrameNode));
                     //file_create_node(&frameNode->head);
                     //rObj.frameNode = frameNode;
-
-                    int offset = 0;
-                    char *ptr = rObj.data;
-                    long long time0 = api_get_sys_time(0);
-                    int rsize = fread(&ptr[offset], 1, frame_size, rfp);
-                    if(rsize != frame_size)
+                    rObj.data = &read_buf[offset + offset1];
+                    rObj.data_size = frame_size;
+                    if(j == (rObj.info.pic_size - 1))
                     {
-                        printf("call_test: rsize=%d, ######## \n", rsize);
-                        status = 1;
+                        //min_blk_size
+                        rObj.data_size = img_size - (rObj.info.pic_size - 1) * frame_size;
+                        MYPRINT2("call_test: rObj.data_size=%d \n", rObj.data_size);
                     }
-                    sumsize += rsize;
-                    offset += rsize;
-                    long long time1 = api_get_sys_time(0);
-                    int difftime = (int)(time1 - time0);
-                    if(difftime > 10)
-                        MYPRINT("call_test: read: difftime=%d (ms) \n", difftime);
-                    //
-                    rObj.data_size = offset;//frame_size;
+                    offset1 += rObj.data_size;
                     rObj.data_xorcode = 0;
                     //
                     //int ret = file_packet(&rObj, out_buf, out_size, rtpSize);
                     int ret = raw2pkt(&rObj, out_buf, out_size, rtpSize);
-                    MYPRINT2("call_test: file_packet: ret=%d \n", ret);
+                    MYPRINT("call_test: raw2pkt: ret=%d \n", ret);
                     wObj.data = out_buf;
-                    wObj.data_size = ret;//rObj.data_size;
+                    wObj.data_size = ret;
+                    int frame_pkt_size = ret;
                     //ret = file_unpacket(&wObj, out_buf2, out_size2, oSize);
                     //printf("call_test: file_unpacket: ret=%d \n", ret);
                     //
@@ -376,15 +437,21 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                     int offset2 = 0;
                     int l = 0;
                     ret = 0;
-                    while(offset2 < out_size)
+                    while(offset2 < frame_pkt_size)
                     {
                         if(rtpSize[l] > 0)
                         {
                             ret += pkt2cache(&wObj, &out_buf[offset2], rtpSize[l]);
                             offset2 += rtpSize[l];
-                            MYPRINT2("call_test: rtpSize[l]=%d, l=%d \n", rtpSize[l], l);
+                            MYPRINT("call_test: rtpSize[l]=%d, l=%d \n", rtpSize[l], l);
+
                         }
                         l++;
+                        if(l >= (frame_blks + 1))
+                        {
+                            MYPRINT2("call_test: offset2=%d, frame_pkt_size=%d \n", offset2, frame_pkt_size);
+                            break;
+                        }
                     }
 
                     time1 = api_get_sys_time(0);
@@ -393,11 +460,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                         MYPRINT("call_test: write: difftime=%d (ms) \n", difftime);
                     sumsize2 += ret;
                     //printf("call_test: pkt2file: ret=%d \n", ret);
-                    if(sumsize != sumsize2)
-                    {
-                        MYPRINT2("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
-                        MYPRINT2("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
-                    }
+
                     //frame_add_node(picNode->head, &frameNode);
                     rObj.frame_id++;
                     if(sumsize >= total_size)
@@ -407,8 +470,18 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                         break;
                     }
                 }//j
+                if(sumsize >= sumsize2)
+                {
+                    MYPRINT2("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
+                    MYPRINT2("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
+                }
                 //pic_add_node(groupNode->head, &picNode);
                 rObj.pic_id++;
+                offset += img_size;
+                MYPRINT2("call_test: offset1=%d, img_size=%d, i=%d \n", offset1, img_size, i);
+                MYPRINT2("call_test: (offset >> 20)=%d, i=%d \n", (offset >> 20), i);
+                //status = 1;//test
+
             }//i
             //group_add_node(rObj.head, &groupNode);
             rObj.group_id++;
@@ -417,7 +490,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
             printf("call_test: sumsize=%d (MB), status=%d, k=%d \n", (sumsize >> 20), status, k);
             ret = (sumsize2 >> 20);
         }
-#if 1
+#if 0
         //验证索引文件
         if(idxfp)
         {
@@ -429,7 +502,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         {
 
             fseek(idxrfp, 0, SEEK_END);
-            long long total_size2 = ftell(idxrfp);
+            int64_t total_size2 = ftell(idxrfp);
             printf("call_test: total_size2=%d \n", total_size2);
             rewind(idxrfp);
             sumsize = 0;
@@ -439,16 +512,16 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
             int i = 0;
             while((sumsize < total_size2))
             {
-                int rsize = fread(ptr, 1, head_size, idxrfp);
+                int rsize = fread(read_buf, 1, head_size, idxrfp);
                 if(rsize)
                 {
-                    CacheHead *src_head = (CacheHead *)ptr;
+                    CacheHead *src_head = (CacheHead *)read_buf;
                     int data_type = src_head->data_type;
                     int data_size = src_head->data_size;
                     int rtp_pkt_size = src_head->rtp_pkt_size;
                     if(data_type)
                     {
-                        int rsize2 = fread(ptr, 1, rtp_pkt_size, idxrfp);
+                        int rsize2 = fread(read_buf, 1, rtp_pkt_size, idxrfp);
                         if(rsize2 != rtp_pkt_size)
                         {
                             printf("error: call_test: rsize2=%d, rtp_pkt_size=%d \n", rsize2, rtp_pkt_size);
@@ -481,7 +554,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         if(wfp2)
         {
             fseek(wfp2, 0, SEEK_END);//SEEK_SET//SEEK_CUR
-            long long total_size3 = ftell(wfp2);
+            int64_t total_size3 = ftell(wfp2);
             printf("call_test: total_size3=%lld \n", total_size3);
             rewind(wfp2);
             //
