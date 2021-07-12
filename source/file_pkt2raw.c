@@ -327,7 +327,7 @@ int get_picture(FileRtpObj *obj, PicVector *p1)
             }
             else
             {
-                MYPRINT2("lost: get_picture: p3->size=%d, j=%d, k=%d \n", p3->size, j, k);
+                MYPRINT2("lost: get_picture: p3->size=%d, p3->data=%x, j=%d, k=%d \n", p3->size, p3->data, j, k);
                 lost = 1;
             }
             offset += (int)mtu_size;
