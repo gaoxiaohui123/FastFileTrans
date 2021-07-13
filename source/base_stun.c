@@ -203,6 +203,8 @@ int get_local_port(SOCKFD fd)
     else
     {
         perror("get_local_port: 2: getsockname");
+        char *p_local_ip = inet_ntoa(localaddr.sin_addr);
+        printf("get_local_port: p_local_ip: %s\n", p_local_ip);
         printf("get_local_port: port: %d\n", ntohs(localaddr.sin_port));
     }
     return ret;
@@ -440,6 +442,7 @@ int api_sock_test(char *server_ip, int port)
     usleep(1000 * 1000);//
     char send_buf[1500];
     ret = send_data(client, send_buf, 300, client->addr_serv);
+    get_local_port(client->sock_fd);
     usleep(1000 * 1000);//
     client->status = 0;
     server->status = 0;
