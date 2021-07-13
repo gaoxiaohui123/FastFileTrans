@@ -19,6 +19,7 @@ int create_vector(FileRtpObj *obj)
     unsigned int frame_size = obj->info.frame_size;//256
     unsigned int pic_size = obj->info.pic_size;//12
     unsigned int group_size = obj->info.group_size;//256
+    MYPRINT2("create_vector: group_size=%d \n", group_size);
     GroupVector *p0 = &obj->groupVector;
     p0->max_num = group_size;
     p0->picVector = (PicVector *)calloc(1, group_size * sizeof(PicVector));
@@ -94,28 +95,34 @@ int free_picture(FileRtpObj *obj, PicVector *p1)
 int release_vector(FileRtpObj *obj)
 {
     int ret = 0;
+    MYPRINT2("release_vector: start \n");
     unsigned int frame_size = obj->info.frame_size;//256
     unsigned int pic_size = obj->info.pic_size;//12
     unsigned int group_size = obj->info.group_size;//256
     GroupVector *p0 = &obj->groupVector;
+    MYPRINT2("release_vector: p0->picVector=%x \n", p0->picVector);
+    MYPRINT2("release_vector: group_size=%d \n", group_size);
     if(p0->picVector)
     {
         ret += group_size * sizeof(PicVector);
         for(int i = 0; i < group_size; i++)
         {
             PicVector *p1 = &p0->picVector[i];
+            MYPRINT("release_vector: p1->frameVector=%x \n", p1->frameVector);
             if(p1->frameVector)
             {
                 ret += pic_size * sizeof(FrameVector);
                 for(int j = 0; j < pic_size; j++)
                 {
                     FrameVector *p2 = &p1->frameVector[j];
+                    MYPRINT("release_vector: p2->pktItem=%x \n", p2->pktItem);
                     if(p2->pktItem)
                     {
                         ret += frame_size * sizeof(PktItem);
                         for(int k = 0; k < frame_size; k++)
                         {
                             PktItem *p3 = (PktItem *)&p2->pktItem[k];
+                            MYPRINT("release_vector: i=%d, j=%d, k=%d \n", i, j, k);
                             if(p3->data)
                             {
                                 ret += p3->size;
@@ -128,6 +135,9 @@ int release_vector(FileRtpObj *obj)
                         p2->pktItem = NULL;
                         p2->max_num = 0;
                         p2->num = 0;
+                    }
+                    else{
+                        MYPRINT2("release_vector: p2->pktItem=%x, j=%d \n", p2->pktItem, j);
                     }
                 }//j
                 if(p1->img)
@@ -151,6 +161,7 @@ int release_vector(FileRtpObj *obj)
         p0->picVector = NULL;
         p0->max_num = 0;
     }
+    MYPRINT2("release_vector: (ret)=%d \n", (ret));
     return ret;
 }
 int count_bw(FileRtpObj *obj, int64_t now_time, int size)
@@ -574,6 +585,7 @@ int pkt2cache(FileRtpObj *obj, char *data, int size)
 	        int64_t time_stamp1 = rtp_ext->time_stamp1;
 	        int64_t packet_time_stamp = time_stamp0 | (time_stamp1 << 32);
 	        int data_type = rtp_ext->data_type;
+	        int blk_id = rtp_ext->blk_id;
             int frame_id = rtp_ext->frame_id;
             int pic_id = rtp_ext->pic_id;
             int group_id = rtp_ext->group_id;
@@ -592,7 +604,7 @@ int pkt2cache(FileRtpObj *obj, char *data, int size)
                     {
                         FrameVector *p2 = &p1->frameVector[frame_id];
                         int64_t now_time = api_get_sys_time(obj->net_time);
-                        int k = (int)(pkt_idx % p2->max_num);
+                        int k = blk_id;//(int)(pkt_idx % p2->max_num);
                         PktItem *p3 = (PktItem *)&p2->pktItem[k];
                         if(p3->size > 0 && p3->group_id != group_id)
                         {
@@ -628,13 +640,19 @@ int pkt2cache(FileRtpObj *obj, char *data, int size)
                             }
                             p2->num += not_rtx;
                             obj->lrCount.pkt_num += not_rtx;
-                            MYPRINT("pkt2cache: p2->num=%d \n", p2->num);
-                            if(p3->size < mtu_size)
+                            MYPRINT("pkt2cache: p2->num=%d, frame_id=%d \n", p2->num, frame_id);
+
+                            if(p3->size < mtu_size || (frame_id == p2->max_num))
                             {
-                                MYPRINT2("tail: pkt2cache: p3->size=%d \n", p3->size);
+                                MYPRINT("tail: pkt2cache: p3->size=%d \n", p3->size);
+                                MYPRINT("tail: pkt2cache: frame_id=%d \n", frame_id);
                             }
                             if(p2->num >= p2->max_num || (p3->size < mtu_size))//???
+                            //if(blk_id >= p2->max_num || (p3->size < mtu_size))
                             {
+                                MYPRINT("pkt2cache: p3->size=%d, mtu_size=%d \n", p3->size, mtu_size);
+                                MYPRINT("pkt2cache: p2->num=%d, p2->max_num=%d \n", p2->num, p2->max_num);
+                                MYPRINT("pkt2cache: frame_id=%d, blk_id=%d \n", frame_id, blk_id);
                                 p2->complete = 2;
                                 p1->complete_num++;
                             }
@@ -647,11 +665,11 @@ int pkt2cache(FileRtpObj *obj, char *data, int size)
                         //获取帧
                         if(p1->complete_num >= p1->max_num)
                         {
-                            MYPRINT2("pkt2cache: pic_id=%d \n", pic_id);
+                            MYPRINT2("pkt2cache: get_picture: pic_id=%d \n", pic_id);
                             get_picture(obj, p1);
                         }
                         //丢包统计
-                        count_lossrate(obj, now_time);
+                        ///count_lossrate(obj, now_time);
                     }
                     //
                 }
@@ -661,6 +679,8 @@ int pkt2cache(FileRtpObj *obj, char *data, int size)
             }
             else if(data_type == 1)
             {
+                obj->fileHead.size = size;
+                memcpy((void *)obj->fileHead.data, (void *)data, size);
                 memcpy((void *)&obj->info, payload_ptr, sizeof(FileInfo));
                 create_vector(obj);
                 FILE *index_fp = obj->index_fp;
@@ -681,6 +701,8 @@ int pkt2cache(FileRtpObj *obj, char *data, int size)
             else if(data_type == 2)
             {
                 FileInfo info;
+                obj->fileTail.size = size;
+                memcpy((void *)obj->fileTail.data, (void *)data, size);
                 memcpy((void *)&info, payload_ptr, sizeof(FileInfo));
             }
             ret = size;

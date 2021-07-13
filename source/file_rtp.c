@@ -266,8 +266,7 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         //
         //group_create_node(&rObj.head);
         //group_create_node(&wObj.head);
-        create_vector(&rObj);
-        create_vector(&wObj);
+
         //
         fseek(rfp, 0, SEEK_END);
         int64_t total_size = ftell(rfp);
@@ -333,14 +332,16 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
 
         char *read_buf = calloc(1, rObj.cache_size * sizeof(char));
         rObj.data = read_buf;
-        int max_buf_size = (frame_blks + 1) * (mtu_size + 100);
+        int64_t unit_size = sizeof(RTP_FIXED_HEADER) + sizeof(FILE_EXTEND_HEADER) + mtu_size;
+        int max_buf_size = (int)((unit_size * rObj.cache_size) / mtu_size) + unit_size;//(frame_blks + 1) * (mtu_size + 100);
+        MYPRINT2("call_test: max_buf_size=%d \n", max_buf_size);
         int out_size = max_buf_size;
-        char *out_buf = calloc(1, out_size);
-        short *rtpSize = calloc(1, (frame_blks + 1) * sizeof(short));
+        char *out_buf = calloc(1, out_size);//for repeat trans
+        short *rtpSize = calloc(1, frame_blks * sizeof(short));
 
-        int out_size2 = max_buf_size;
-        char *out_buf2 = calloc(1, out_size);
-        short *oSize = rtpSize;// calloc(1, (frame_blks + 1) * sizeof(short));
+        //int out_size2 = max_buf_size;
+        //char *out_buf2 = calloc(1, out_size);
+        //short *oSize = rtpSize;// calloc(1, (frame_blks + 1) * sizeof(short));
 
         rObj.info.file_xorcode = 0;      //文件异或码（文件首个64MBytes）
         strcpy(rObj.info.filename, ifilename);    //去除路径的文件名
@@ -360,10 +361,12 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         rObj.enable_fec = 0;
         //rObj.picNode = NULL;
         //pic_create_node(&rObj.picNode);
+        create_vector(&rObj);
         //
         printf("call_test: total_size=%d \n", total_size);
         //
         int offset = 0;
+        int offset3 = 0;
         while((sumsize < total_size) && !status)
         {
             //group: 256 * 256 * 1100 > 64MB
@@ -388,7 +391,8 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                 {
                     MYPRINT2("call_test: offset=%d, k=%d, i=%d \n", offset, k, i);
                     offset = 0;
-                    status = 1;//test
+                    offset3 = 0;
+                    //status = 1;//test
                 }
                 int rsize = fread(&read_buf[offset], 1, img_size, rfp);
                 if(rsize != img_size)
@@ -424,32 +428,39 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                     rObj.data_xorcode = 0;
                     //
                     //int ret = file_packet(&rObj, out_buf, out_size, rtpSize);
-                    int ret = raw2pkt(&rObj, out_buf, out_size, rtpSize);
+                    int ret = raw2pkt(&rObj, &out_buf[offset3], out_size, rtpSize);
                     MYPRINT("call_test: raw2pkt: ret=%d \n", ret);
-                    wObj.data = out_buf;
+                    wObj.data = &out_buf[offset3];
                     wObj.data_size = ret;
                     int frame_pkt_size = ret;
+
                     //ret = file_unpacket(&wObj, out_buf2, out_size2, oSize);
                     //printf("call_test: file_unpacket: ret=%d \n", ret);
                     //
                     time0 = api_get_sys_time(0);
                     //ret = pkt2file(idxfp, wfp, out_buf2, ret, oSize, &pkt_idx);
+                    ret = 0;
+                    if(!i && !j && !k)
+                    {
+                        MYPRINT2("call_test: raw2pkt: rObj.pkt_idx=%d \n", rObj.pkt_idx);
+                        ret += pkt2cache(&wObj, rObj.fileHead.data, rObj.fileHead.size);
+                    }
                     int offset2 = 0;
                     int l = 0;
-                    ret = 0;
+
                     while(offset2 < frame_pkt_size)
                     {
                         if(rtpSize[l] > 0)
                         {
-                            ret += pkt2cache(&wObj, &out_buf[offset2], rtpSize[l]);
+                            ret += pkt2cache(&wObj, &out_buf[offset3 + offset2], rtpSize[l]);
                             offset2 += rtpSize[l];
                             MYPRINT("call_test: rtpSize[l]=%d, l=%d \n", rtpSize[l], l);
 
                         }
                         l++;
-                        if(l >= (frame_blks + 1))
+                        if(l >= frame_blks)
                         {
-                            MYPRINT2("call_test: offset2=%d, frame_pkt_size=%d \n", offset2, frame_pkt_size);
+                            MYPRINT("call_test: offset2=%d, frame_pkt_size=%d \n", offset2, frame_pkt_size);
                             break;
                         }
                     }
@@ -460,35 +471,42 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
                         MYPRINT("call_test: write: difftime=%d (ms) \n", difftime);
                     sumsize2 += ret;
                     //printf("call_test: pkt2file: ret=%d \n", ret);
-
+                    offset3 += frame_pkt_size;
                     //frame_add_node(picNode->head, &frameNode);
                     rObj.frame_id++;
                     if(sumsize >= total_size)
                     {
                         printf("call_test: sumsize=%lld, total_size=%lld ######## \n", sumsize, total_size);
+
+                        ret = pkt2cache(&wObj, rObj.fileTail.data, rObj.fileTail.size);
+
                         status = 1;
                         break;
                     }
+                    //return 1;//test
                 }//j
-                if(sumsize >= sumsize2)
-                {
-                    MYPRINT2("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
-                    MYPRINT2("call_test: i=%d, k=%d TTTTTTTTTTTTTTTTT \n", i, k);
-                }
+
                 //pic_add_node(groupNode->head, &picNode);
                 rObj.pic_id++;
                 offset += img_size;
                 MYPRINT2("call_test: offset1=%d, img_size=%d, i=%d \n", offset1, img_size, i);
                 MYPRINT2("call_test: (offset >> 20)=%d, i=%d \n", (offset >> 20), i);
                 //status = 1;//test
+                //return 1;//test
 
             }//i
+            if(sumsize >= sumsize2)
+            {
+                MYPRINT2("call_test: sumsize=%lld, sumsize2=%lld \n", sumsize, sumsize2);
+            }
+            MYPRINT2("call_test: wObj.info.group_size=%d \n", wObj.info.group_size);
             //group_add_node(rObj.head, &groupNode);
             rObj.group_id++;
             k++;
             printf("call_test: sumsize=%lld, sumsize2=%lld, total_size=%lld \n", sumsize, sumsize2, total_size);
             printf("call_test: sumsize=%d (MB), status=%d, k=%d \n", (sumsize >> 20), status, k);
             ret = (sumsize2 >> 20);
+            //return 1;//test
         }
 #if 0
         //验证索引文件
@@ -625,16 +643,25 @@ int call_test(char *ifilename, char *ofilename, char *idxfilename, int img_size)
         {
             free(rtpSize);
         }
-        if(out_buf2)
+        //if(out_buf2)
+        //{
+        //    free(out_buf2);
+        //}
+        if(read_buf)
         {
-            free(out_buf2);
+            free(read_buf);
         }
-        int ret2 = rename(ofilename2, ofilename);
-        release_vector(&rObj);
+        if(wfp)
+        {
+            int ret2 = rename(ofilename2, ofilename);
+            printf("call_test: rename: ret2=%d \n", ret2);
+        }
+        printf("call_test: start obj free \n");
         release_vector(&wObj);
+        release_vector(&rObj);
+
         pthread_mutex_destroy(&rObj.lock);
         pthread_mutex_destroy(&wObj.lock);
-        printf("call_test: rename: ret2=%d \n", ret2);
         printf("call_test: end free \n");
     }
     printf("call_test: close rfp \n");

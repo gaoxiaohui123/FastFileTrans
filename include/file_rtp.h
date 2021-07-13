@@ -149,6 +149,7 @@ typedef struct {
     unsigned int data_type : 3;         //1:file start info;2:file end info; 0:raw data
     unsigned int enable_encrypt : 1;    //是否加密
     unsigned int enable_fec : 1;         //是否开启fec
+    unsigned int blk_id : 9;
     unsigned int frame_id : 9; //[0, pic_blks)
     unsigned int pic_id : 9;                //only use for picture //[0, group_blks)
     unsigned int group_id : 30; //[0, 2^22)
@@ -183,6 +184,10 @@ typedef struct{
     unsigned int group_id : 30; //[0, 2^22)
     unsigned int pkt_idx;   //[0, 2^32)
 }CacheHead;
+typedef struct{
+    char data[512];
+    int size;
+}FileHead;
 
 #if 0
 struct FileInfo {
@@ -325,8 +330,8 @@ typedef struct{
     BWCount bwCount;
     LRCount lrCount;
     NDCount ndCount;
-    char FileHead[512];
-    char FileTail[512];
+    FileHead fileHead;
+    FileHead fileTail;
     FILE *index_fp;
     FILE *raw_fp;
 }FileRtpObj;

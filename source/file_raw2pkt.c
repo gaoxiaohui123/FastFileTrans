@@ -14,7 +14,7 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     char *data = obj->data;
     int data_size = obj->data_size;
     unsigned short seq_no = obj->seq_no;
-    unsigned int frame_id = obj->frame_id;
+    unsigned int frame_id = obj->frame_id % obj->info.pic_size;
     unsigned int pic_id = obj->pic_id % obj->info.group_size;
     unsigned int group_id = obj->group_id;
     unsigned int data_xorcode = obj->data_xorcode;
@@ -36,28 +36,29 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
     while(offset < data_size)
     {
         int flag = !seq_no && !frame_id && !pic_id && !group_id;
-        RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)&out_buf[offset2];
-        FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&out_buf[offset2 + rtp_header_size];
-        char *payload_ptr = (char *)&out_buf[offset2 + rtp_header_size + ext_size];
-        rtp_hdr->payload     = FILE_PLT;  //负载类型号，									PT
-        rtp_hdr->version     = 2;  //版本号，此版本固定为2								V
-        rtp_hdr->padding	 = 0;//														P
-        rtp_hdr->csrc_len	 = 0;//														CC
-        rtp_hdr->marker		 = 0;//(size >= len);   //标志位，由具体协议规定其值。		M
-        rtp_hdr->ssrc        = 0;//ssrc;//(unsigned int)svc_nalu;;//htonl(10);    //随机指定为10，并且在本RTP会话中全局唯一	SSRC
-        rtp_hdr->extension	 = 1;//														X
-        rtp_hdr->timestamp   = 0;//?
-        rtp_hdr->seq_no = obj->seq_no;//(*seq_num);///htons(seq_num ++); //序列号，每发送一个RTP包增1
-        if (seq_no >= MAX_USHORT)
-        {
-            seq_no = 0;
-        }
-        else{
-            seq_no++;
-        }
+
         if(flag)
         {
             printf("raw2pkt: 000000000000000000000 uuuuuuuuuuuuuuu \n");
+            RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)obj->fileHead.data;
+            FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&obj->fileHead.data[rtp_header_size];
+            char *payload_ptr = (char *)&obj->fileHead.data[rtp_header_size + ext_size];
+            rtp_hdr->payload     = FILE_PLT;  //负载类型号，									PT
+            rtp_hdr->version     = 2;  //版本号，此版本固定为2								V
+            rtp_hdr->padding	 = 0;//														P
+            rtp_hdr->csrc_len	 = 0;//														CC
+            rtp_hdr->marker		 = 0;//(size >= len);   //标志位，由具体协议规定其值。		M
+            rtp_hdr->ssrc        = 0;//ssrc;//(unsigned int)svc_nalu;;//htonl(10);    //随机指定为10，并且在本RTP会话中全局唯一	SSRC
+            rtp_hdr->extension	 = 1;//														X
+            rtp_hdr->timestamp   = 0;//?
+            rtp_hdr->seq_no = obj->seq_no;//(*seq_num);///htons(seq_num ++); //序列号，每发送一个RTP包增1
+            if (seq_no >= MAX_USHORT)
+            {
+                seq_no = 0;
+            }
+            else{
+                seq_no++;
+            }
             short payload_size = sizeof(FileInfo);
             rtp_ext->rtp_extend_profile = EXTEND_PROFILE_ID;
             rtp_ext->rtp_extend_length = ((rtp_extend_length & 0xFF) << 8) | ((rtp_extend_length >> 8));
@@ -72,17 +73,37 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
 			rtp_ext->time_stamp0 = now_time & 0xFFFFFFFF;
 			rtp_ext->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
             rtp_ext->rtp_xorcode = 0;
-            //obj->pkt_idx++;
+            obj->pkt_idx++;
             //
             FileInfo *info_data = (FileInfo *)payload_ptr;//&out_buf[offset2 + rtp_header_size + ext_size];
             memcpy((void *)info_data, (void *)info, payload_size);
             //
-            offset2 += (int)(rtp_header_size + ext_size + payload_size);
-            rtpSize[i] = rtp_header_size + ext_size + payload_size;
+            //offset2 += (int)(rtp_header_size + ext_size + payload_size);
+            //rtpSize[i] = rtp_header_size + ext_size + payload_size;
             //
-            memcpy((void *)&obj->FileHead, (void *)rtp_hdr, (rtp_header_size + ext_size + payload_size));
+            obj->fileHead.size = (rtp_header_size + ext_size + payload_size);
+            //memcpy((void *)obj->fileHead.data, (void *)rtp_hdr, obj->fileHead.size);
         }
         else{
+            RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)&out_buf[offset2];
+            FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&out_buf[offset2 + rtp_header_size];
+            char *payload_ptr = (char *)&out_buf[offset2 + rtp_header_size + ext_size];
+            rtp_hdr->payload     = FILE_PLT;  //负载类型号，									PT
+            rtp_hdr->version     = 2;  //版本号，此版本固定为2								V
+            rtp_hdr->padding	 = 0;//														P
+            rtp_hdr->csrc_len	 = 0;//														CC
+            rtp_hdr->marker		 = 0;//(size >= len);   //标志位，由具体协议规定其值。		M
+            rtp_hdr->ssrc        = 0;//ssrc;//(unsigned int)svc_nalu;;//htonl(10);    //随机指定为10，并且在本RTP会话中全局唯一	SSRC
+            rtp_hdr->extension	 = 1;//														X
+            rtp_hdr->timestamp   = 0;//?
+            rtp_hdr->seq_no = obj->seq_no;//(*seq_num);///htons(seq_num ++); //序列号，每发送一个RTP包增1
+            if (seq_no >= MAX_USHORT)
+            {
+                seq_no = 0;
+            }
+            else{
+                seq_no++;
+            }
             int tail = data_size - offset;
             int payload_size = tail >= block_size ? block_size : tail;
             if(payload_size != mtu_size)
@@ -97,6 +118,7 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             rtp_ext->enable_fec = obj->enable_fec;         //是否开启fec
             int frame_id = obj->frame_id;
             unsigned int pkt_idx = obj->pkt_idx;
+            rtp_ext->blk_id = i;
             rtp_ext->frame_id = frame_id;
             rtp_ext->pic_id = pic_id;
             rtp_ext->group_id = group_id;
@@ -116,7 +138,7 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
                 if(frame_id < p1->max_num)
                 {
                     FrameVector *p2 = &p1->frameVector[frame_id];
-                    int k = (int)(pkt_idx % p2->max_num);
+                    int k = i;//(int)(pkt_idx % p2->max_num);
                     PktItem *p3 = (PktItem *)&p2->pktItem[k];
 #if 0
                     if(p3->size > 0 && p3->group_id != group_id)
@@ -126,8 +148,21 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
                     else
 #endif
                     {
-                        p3->data = src_ptr;
+
+#if 1
+                        if(p3->data)
+                        {
+                            free(p3->data);
+                            p3->data = NULL;
+                        }
                         p3->size = (rtp_header_size + ext_size + payload_size);
+                        char *data2 = (char *)calloc(1, p3->size * sizeof(char));
+                        memcpy(data2, src_ptr, p3->size);
+                        p3->data = data2;
+#else
+                        p3->size = (rtp_header_size + ext_size + payload_size);
+                        p3->data = src_ptr;
+#endif
                         p3->group_id = group_id;
                     }
                 }
@@ -139,13 +174,13 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             obj->snd_size += payload_size;
             rtpSize[i] = rtp_header_size + ext_size + payload_size;
             obj->pkt_idx++;
+            i++;
         }
-        i++;
         if(obj->snd_size == filesize)
         {
-            RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)&out_buf[offset2];
-            FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&out_buf[offset2 + rtp_header_size];
-            char *payload_ptr = (char *)&out_buf[offset2 + rtp_header_size + ext_size];
+            RTP_FIXED_HEADER *rtp_hdr    = (RTP_FIXED_HEADER *)&obj->fileTail.data[0];
+            FILE_EXTEND_HEADER *rtp_ext  = (FILE_EXTEND_HEADER *)&obj->fileTail.data[rtp_header_size];
+            char *payload_ptr = (char *)&obj->fileTail.data[rtp_header_size + ext_size];
             rtp_hdr->payload     = FILE_PLT;  //负载类型号，									PT
             rtp_hdr->version     = 2;  //版本号，此版本固定为2								V
             rtp_hdr->padding	 = 0;//														P
@@ -182,14 +217,15 @@ int raw2pkt(FileRtpObj *obj, char *out_buf, int out_size, short *rtpSize)
             FileInfo *info_data = (FileInfo *)payload_ptr;//&out_buf[offset2 + rtp_header_size + ext_size];
             memcpy((void *)info_data, (void *)info, payload_size);
             //
-            offset2 += (int)(rtp_header_size + ext_size + payload_size);
-            rtpSize[i] = rtp_header_size + ext_size + payload_size;
-            //obj->pkt_idx++;
-            i++;
+            //offset2 += (int)(rtp_header_size + ext_size + payload_size);
+            //rtpSize[i] = rtp_header_size + ext_size + payload_size;
+            obj->pkt_idx++;
+            //i++;
             //
-            memcpy((void *)&obj->FileTail, (void *)rtp_hdr, (rtp_header_size + ext_size + payload_size));
+            obj->fileTail.size = (rtp_header_size + ext_size + payload_size);
+            //memcpy((void *)obj->fileTail.data, (void *)rtp_hdr, obj->fileTail.size);
         }
-        //printf("file_packet: offset=%d, i=%d \n", offset, i);
+        MYPRINT("file_packet: offset=%d, i=%d \n", offset, i);
     }
     //obj->frame_id++;
     obj->seq_no = seq_no;
