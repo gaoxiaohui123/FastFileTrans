@@ -18,6 +18,7 @@ case $Num in
   ./source/file_rtp.c \
   ./source/file_raw2pkt.c \
   ./source/file_pkt2raw.c \
+  ./source/base_stun.c \
   -I./include/ \
   -L./ \
   -L/usr/local/lib \

@@ -97,7 +97,7 @@ gload = LoadLib()
 def TestLocal():
     start_time = time.time()
     ifilename = '/home/gxh/works/datashare/InToTree_1920x1080.yuv'
-    #ifilename = '/home/gxh/works/InToTree_1920x1080_0.yuv'
+    ifilename = '/home/gxh/works/InToTree_1920x1080_0.yuv'
     ofilename = '/home/gxh/works/InToTree_1920x1080.yuv'
     idxfilename = '/home/gxh/works/InToTree_1920x1080.idx'
     img_size = (1920 * 1080 * 3) >> 1
@@ -112,7 +112,13 @@ def TestLocal():
     print('TestLocal: difftime={:.3f}(MB/s)'.format(avg))
     avg2 = (ret * 1000 * 8) / (difftime * 1024)
     print('TestLocal: difftime={:.3f}(Gbps)'.format(avg2))
+def TestSock():
+    server_ip = "127.0.0.1"
+    port = 10080
+    ret = gload.lib.api_sock_test(server_ip.encode('utf-8'), port)
+    print("TestSock: ret=", ret)
 if __name__ == '__main__':
     print('Start pycall.')
-    TestLocal()
+    #TestLocal()
+    TestSock()
     print('End pycall.')

@@ -28,11 +28,30 @@ EXTERNC {
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 #include <math.h>
 #include <fcntl.h>
 #include <pthread.h>
 #ifdef _WIN32
 #include <windows.h>
+#endif
+
+#if defined (WIN32)
+#include <winsock2.h>
+#include<ws2tcpip.h>
+#else
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#endif
+
+#if defined (WIN32)
+#define SOCKFD SOCKET
+#else
+#define SOCKFD int
 #endif
 
 #ifndef false
@@ -336,6 +355,18 @@ typedef struct{
     FILE *raw_fp;
 }FileRtpObj;
 
+#if 1
+typedef struct{
+    SOCKFD sock_fd;
+    struct sockaddr_in addr_serv;
+    int port;
+    char server_ip[64];
+    pthread_mutex_t lock;
+    pthread_t recv_pid;
+    pthread_t send_pid;
+    int status;
+}SocketObj;
+#endif
 
 #ifdef __cplusplus
 }
