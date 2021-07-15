@@ -32,7 +32,7 @@ case $Num in
 ;;
 2)
   echo "build for macosx"
-  eexport DYLD_LIBRARY_PATH=`pwd`
+  export DYLD_LIBRARY_PATH=`pwd`
 
   gcc -dynamiclib -o .libqft.dylib \
   -Wformat=0 -fvisibility=hidden -ldl \
