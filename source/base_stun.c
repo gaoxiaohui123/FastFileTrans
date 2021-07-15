@@ -51,8 +51,12 @@
 //int get_local_mac(const char *eth_inf, char *mac); // 获取本机mac
 //int get_local_ip(const char *eth_inf, char *ip); // 获取本机ip
 
+extern int stun_create_node(CStunNode **head0);
+extern void stun_add_node(CStunNode *head, CStunNode **pnew);
+extern void stun_delete_node(CStunNode *head);
+extern void stun_free_node(CStunNode *head);
 
-
+static unsigned int glob_session_id = 1;
 
 // 根据域名获取ip
 int get_ip_by_domain(const char *domain, char *ip)
@@ -113,7 +117,8 @@ int get_local_mac(const char *eth_inf, char *mac)
     return 0;
 }
 #endif
-
+//数据包包含了源端口号和目的端口号，客户端socket向服务端发起连接时，系统会给socket随机分配一个源端口号，
+//我们可以通过getsocketname来获取连接成功的socket的原端口信息
 #ifdef WIN32
 void get_local_ip(char *ip, int size)
 {
@@ -235,7 +240,7 @@ int socket_close(SocketObj *obj)
 int send_data(SocketObj *obj, char *data, int size, struct sockaddr_in addr_client)
 {
     int ret = 0;
-    int len = sizeof(obj->addr_serv);
+    int len = sizeof(addr_client);
     ret = sendto(obj->sock_fd, data, size, 0, (struct sockaddr *)&addr_client, len);
     return ret;
 }
@@ -251,11 +256,7 @@ int server_recv_run(SocketObj *obj)
         char recv_buf[1500] = "";
         int data_len = 1500;
         int recv_num = recvfrom(obj->sock_fd, recv_buf, data_len, 0, (struct sockaddr *)&addr_client, (socklen_t *)&len);
-        MYPRINT2("server_recv_run: recv_num=%d \n", recv_num);
-        int remote_port = addr_client.sin_port;
-        //int remote_ip = addr_client.sin_addr.s_addr;
-        char *p_remote_ip = inet_ntoa(addr_client.sin_addr);
-        MYPRINT2("server_recv_run: p_remote_ip=%s, remote_port=%d \n", p_remote_ip, remote_port);
+
         if(recv_num <= 0)
         {
             if(errno != EAGAIN && !recv_num)
@@ -270,6 +271,78 @@ int server_recv_run(SocketObj *obj)
                     break;
                 }
             }
+        }
+        else{
+            MYPRINT2("server_recv_run: recv_num=%d \n", recv_num);
+            int remote_port = addr_client.sin_port;
+            char *p_remote_ip = inet_ntoa(addr_client.sin_addr);
+            {
+                int64_t now_time = (int64_t)api_get_sys_time(0);
+                char *data = recv_buf;
+                StunInfo *p = (StunInfo *)data;
+                CMDType cmdtype = p->cmdtype;
+                uint32_t this_session_id = p->session_id;
+                MYPRINT2("server_recv_run: p->local_ip=%s, p->local_port=%d \n", p->local_ip, p->local_port);
+                //
+                uint64_t time_stamp0 = p->time_stamp0;
+	            uint64_t time_stamp1 = p->time_stamp1;
+	            int64_t packet_time_stamp = time_stamp0 | (time_stamp1 << 32);
+	            int delay_time = (int)(now_time - packet_time_stamp);
+	            MYPRINT2("server_recv_run: p_remote_ip=%s, remote_port=%d, delay_time=%d \n", p_remote_ip, remote_port, delay_time);
+
+                strcpy(p->remote_ip, p_remote_ip);
+                p->remote_port = (uint16_t)remote_port;
+                p->session_id = this_session_id;
+                if(!this_session_id || (this_session_id > glob_session_id))
+                {
+                    MYPRINT2("server_recv_run: this_session_id=%u, glob_session_id=%u \n", this_session_id, glob_session_id);
+                    glob_session_id++;
+                    this_session_id = glob_session_id;
+                    p->session_id = this_session_id;
+                    //
+                    ClientInfo *thisClientInfo = &obj->pClientInfo[this_session_id % MAX_ONLINE_NUM];
+                    stun_create_node(&thisClientInfo->head);
+                    CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
+                    pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
+                    memcpy(pnew->data, p, sizeof(StunInfo));
+                    stun_add_node(thisClientInfo->head, &pnew);
+                }
+                else{
+                    ClientInfo *thisClientInfo = &obj->pClientInfo[this_session_id % MAX_ONLINE_NUM];
+                    if(thisClientInfo->head)
+                    {
+                        switch (cmdtype)
+		                {
+		                	case kReg:
+		                	{
+		                	    CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
+                                pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
+                                memcpy(pnew->data, p, sizeof(StunInfo));
+                                stun_add_node(thisClientInfo->head, &pnew);
+		                	    break;
+		                	}
+		                	case kBye:
+		                	{
+		                	    break;
+		                	}
+		                	case kExit:
+		                	{
+		                	    ClientInfo *thisClientInfo = &obj->pClientInfo[this_session_id % MAX_ONLINE_NUM];
+                                stun_free_node(thisClientInfo->head);
+		                	    break;
+		                	}
+		                	default:
+		                	    MYPRINT2("server_recv_run: cmdtype=%d \n", cmdtype);
+		                		break;
+		                }
+                    }
+                    else{
+                        MYPRINT2("server_recv_run: cmdtype=%d, thisClientInfo->head=%x \n", cmdtype, thisClientInfo->head);
+                    }
+                }
+                ret = send_data(obj, data, sizeof(StunInfo), addr_client);
+            }
+
         }
     }
     //
@@ -324,7 +397,7 @@ int server_init(SocketObj *obj)
         return -1;
     }
     pthread_mutex_init(&obj->lock,NULL);
-
+    obj->pClientInfo = (ClientInfo *)calloc(1, MAX_ONLINE_NUM * sizeof(ClientInfo));
     if(pthread_create(&obj->recv_pid, NULL, server_recv_run, obj) < 0)
     {
         MYPRINT2("server_init: Create server_recv_run failed!\n");
@@ -345,7 +418,7 @@ int client_recv_run(SocketObj *obj)
         char recv_buf[1500] = "";
         int data_len = 1500;
         int recv_num = recvfrom(obj->sock_fd, recv_buf, data_len, 0, (struct sockaddr *)&addr_client, (socklen_t *)&len);
-        MYPRINT2("client_recv_run: recv_num=%d \n", recv_num);
+
         if(recv_num <= 0)
         {
             if(errno != EAGAIN && !recv_num)
@@ -358,6 +431,44 @@ int client_recv_run(SocketObj *obj)
                 {
                     ret = -1;
                     break;
+                }
+            }
+        }
+        else{
+            MYPRINT2("client_recv_run: recv_num=%d \n", recv_num);
+            int64_t now_time = (int64_t)api_get_sys_time(0);
+            int remote_port = addr_client.sin_port;
+            char *p_remote_ip = inet_ntoa(addr_client.sin_addr);
+            char *data = recv_buf;
+            StunInfo *p = (StunInfo *)data;
+            uint32_t this_session_id = p->session_id;
+            int actor = p->actor;
+            int cmdtype = p->cmdtype;
+            uint64_t time_stamp0 = p->time_stamp0;
+	        uint64_t time_stamp1 = p->time_stamp1;
+	        int64_t packet_time_stamp = time_stamp0 | (time_stamp1 << 32);
+	        int delay_time = (int)(now_time - packet_time_stamp);
+	        MYPRINT2("client_recv_run: p_remote_ip=%s, remote_port=%d, delay_time=%d \n", p_remote_ip, remote_port, delay_time);
+            MYPRINT2("client_recv_run: p->remote_ip=%s, p->remote_port=%d, this_session_id=%d \n", \
+            p->remote_ip, p->remote_port, this_session_id);
+            if(this_session_id > 0)
+            {
+                if(!obj->stunInfo.session_id)
+                {
+                    ClientInfo *thisClientInfo = &obj->pClientInfo[0];
+                    stun_create_node(&thisClientInfo->head);
+                    CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
+                    pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
+                    memcpy(pnew->data, p, sizeof(StunInfo));
+                    stun_add_node(thisClientInfo->head, &pnew);
+                    memcpy(&obj->stunInfo, p, sizeof(StunInfo));
+                }
+                else{
+                    if(obj->stunInfo.session_id != this_session_id)
+                    {
+                        MYPRINT2("warning: client_recv_run: this_session_id=%d, obj->stunInfo.session_id=%d \n", \
+                        this_session_id, obj->stunInfo.session_id);
+                    }
                 }
             }
         }
@@ -376,12 +487,31 @@ int client_init(SocketObj *obj)
     get_local_ip(ip, 1024);//test
 
     /* 建立udp socket */
-    obj->sock_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    obj->sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if(obj->sock_fd < 0)
     {
         perror("client_init: socket");
         return -1;
     }
+    struct sockaddr_in localaddr = {};
+    socklen_t slen;
+    localaddr.sin_family = AF_INET;
+    localaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    localaddr.sin_port = 0;
+
+    bind(obj->sock_fd, (struct sockaddr *)&localaddr, sizeof(sin));
+    //connect(obj->sock_fd, sizeof(sin));
+    /* Now bound,get the address */
+    if(false)
+    {
+        slen = sizeof(localaddr);
+        getsockname(obj->sock_fd, (struct sockaddr*)&localaddr, &slen);
+        int local_port = (int)ntohs(localaddr.sin_port);
+        char *p_local_ip = inet_ntoa(localaddr.sin_addr);
+        printf("client_init: p_local_ip: %s\n", p_local_ip);
+        printf("client_init: local_port: %d\n", local_port);
+    }
+
     //超时时间
 #ifdef _WIN32
     int timeout = 500;//ms
@@ -407,16 +537,144 @@ int client_init(SocketObj *obj)
     obj->addr_serv.sin_family = AF_INET;
     obj->addr_serv.sin_addr.s_addr = inet_addr(obj->server_ip);
     obj->addr_serv.sin_port = htons(obj->port);//换为网络字节序
-
-    get_local_port(obj->sock_fd);//test
+    connect(obj->sock_fd, (struct sockaddr*)&obj->addr_serv, sizeof(obj->addr_serv));
+    if(true)
+    {
+        slen = sizeof(localaddr);
+        getsockname(obj->sock_fd, (struct sockaddr*)&localaddr, &slen);
+        int local_port = (int)ntohs(localaddr.sin_port);
+        char *p_local_ip = inet_ntoa(localaddr.sin_addr);
+        printf("client_init: p_local_ip: %s\n", p_local_ip);
+        printf("client_init: local_port: %d\n", local_port);
+    }
+    //get_local_port(obj->sock_fd);//test
 
     pthread_mutex_init(&obj->lock,NULL);
-
+    obj->pClientInfo = (ClientInfo *)calloc(1, 1 * sizeof(ClientInfo));
     if(pthread_create(&obj->recv_pid, NULL, client_recv_run, obj) < 0)
     {
         MYPRINT2("client_init: Create client_recv_run failed!\n");
     }
 
+    return ret;
+}
+FQT_API
+int api_socket_start(char *handle, char *server_ip, int port, int type)
+{
+    int ret = 0;
+    int64_t *testp = (int64_t *)handle;
+    SocketObj *obj = (SocketObj *)testp[0];
+    if(!obj)
+    {
+        obj = (SocketObj *)calloc(1, sizeof(SocketObj));
+        obj->type = type;
+        obj->port = port;//10080;
+        strcpy(obj->server_ip, server_ip);
+        if(!type)
+        {
+            ret = server_init(obj);
+        }
+        else{
+            ret = client_init(obj);
+        }
+        if(ret < 0)
+        {
+            return ret;
+        }
+        int64_t tmp = (int64_t)obj;
+        memcpy(handle, &tmp, sizeof(int64_t));
+    }
+    return ret;
+}
+FQT_API
+int api_socket_stop(char *handle)
+{
+    int ret = 0;
+    int64_t *testp = (int64_t *)handle;
+    SocketObj *obj = (SocketObj *)testp[0];
+    if(obj)
+    {
+        obj->status = 0;
+        if(obj->pClientInfo)
+        {
+            if(!obj->type)
+            {
+                for(int i = 0; i < MAX_ONLINE_NUM; i++)
+                {
+                    ClientInfo *thisClientInfo = &obj->pClientInfo[i % MAX_ONLINE_NUM];
+                    stun_free_node(thisClientInfo->head);
+                }
+            }
+            else{
+                ClientInfo *thisClientInfo = &obj->pClientInfo[0];
+                stun_free_node(thisClientInfo->head);
+            }
+
+            free(obj->pClientInfo);
+            obj->pClientInfo = NULL;
+        }
+        socket_close(obj);
+    }
+    return ret;
+}
+FQT_API
+int api_socket_test(char *handle)
+{
+    int ret = 0;
+    int64_t *testp = (int64_t *)handle;
+    SocketObj *obj = (SocketObj *)testp[0];
+    if(obj)
+    {
+        char send_buf[1500] = "";
+        int send_size = 300;
+        int delay_time0 = 500 * 1000;
+        int i = 0;
+        do{
+            char *data = send_buf;
+            StunInfo *p = (StunInfo *)data;
+            obj->stunInfo.local_port = obj->local_port;
+            strcpy(obj->stunInfo.local_ip, obj->local_ip);
+            obj->stunInfo.cmdtype = 0;
+            obj->stunInfo.actor = kFather;
+
+            if(!obj->stunInfo.session_id)
+            {
+                obj->stunInfo.cmdtype = kReg;
+            }
+            else{
+                if(i == 9)
+                {
+                    obj->stunInfo.cmdtype = kExit;
+                }
+            }
+            memcpy(p, &obj->stunInfo, sizeof(StunInfo));
+            int64_t now_time = (int64_t)api_get_sys_time(0);
+			p->time_stamp0 = now_time & 0xFFFFFFFF;
+			p->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
+            ret = send_data(obj, data, sizeof(StunInfo), obj->addr_serv);
+            if(true)
+            {
+                struct sockaddr_in localaddr = {};
+                socklen_t slen;
+                slen = sizeof(localaddr);
+                getsockname(obj->sock_fd, (struct sockaddr*)&localaddr, &slen);
+                int local_port = (int)ntohs(localaddr.sin_port);
+                char *p_local_ip = inet_ntoa(localaddr.sin_addr);
+                printf("api_socket_test: p_local_ip: %s\n", p_local_ip);
+                printf("api_socket_test: local_port: %d\n", local_port);
+                obj->local_port = (uint16_t)local_port;
+                strcpy(obj->local_ip, p_local_ip);
+                obj->stunInfo.local_port = obj->local_port;
+                strcpy(obj->stunInfo.local_ip, obj->local_ip);
+            }
+            //send_size += 10;
+            i++;
+            int delay_time = delay_time0 * i;
+            usleep(delay_time);//
+            printf("api_sock_test: i=%d \n", i);
+        }while(i < 10);
+        ret = 1;
+    }
     return ret;
 }
 FQT_API
@@ -441,8 +699,19 @@ int api_sock_test(char *server_ip, int port)
     }
     usleep(1000 * 1000);//
     char send_buf[1500];
-    ret = send_data(client, send_buf, 300, client->addr_serv);
-    get_local_port(client->sock_fd);
+    int send_size = 300;
+    int delay_time0 = 500 * 1000;
+    int i = 0;
+    do{
+        ret = send_data(client, send_buf, send_size, client->addr_serv);
+        send_size += 10;
+        i++;
+        int delay_time = delay_time0 * i;
+        usleep(delay_time);//
+        printf("api_sock_test: i=%d \n", i);
+    }while(i < 10);
+
+    //get_local_port(client->sock_fd);
     usleep(1000 * 1000);//
     client->status = 0;
     server->status = 0;

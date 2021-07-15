@@ -62,6 +62,8 @@ EXTERNC {
 #define true    (!false)
 #endif
 
+#define MAX_ONLINE_NUM (1 << 20)
+
 #define FILE_PLT 127
 #define FIX_MTU_SIZE 1400
 #define MTU_SIZE 1100
@@ -356,6 +358,44 @@ typedef struct{
 }FileRtpObj;
 
 #if 1
+typedef enum{
+    kReg = 1,
+    kPing,
+    kBye,
+    kExit,
+}CMDType;
+typedef enum{
+    kFather = 1,
+    kSon,
+}ACTORType;
+
+typedef struct{
+    char local_ip[16];
+    char remote_ip[16];//255.255.255.255
+    unsigned int local_port : 16;
+    unsigned int remote_port : 16;
+    unsigned int session_id;
+    unsigned int passwd;
+    unsigned int cmdtype : 8;
+    unsigned int actor : 3;
+    unsigned int time_stamp0;
+    unsigned int time_stamp1;
+}StunInfo;
+
+struct CStunInfo {
+    int num;
+    int id;
+    StunInfo *data;
+    int size;
+    struct CStunInfo *tail;
+    struct CStunInfo *next;
+};
+typedef struct CStunInfo CStunNode;
+
+typedef struct{
+    unsigned int session_id;
+    CStunNode *head;
+}ClientInfo;
 typedef struct{
     SOCKFD sock_fd;
     struct sockaddr_in addr_serv;
@@ -365,6 +405,11 @@ typedef struct{
     pthread_t recv_pid;
     pthread_t send_pid;
     int status;
+    StunInfo stunInfo;
+    char local_ip[16];
+    unsigned short local_port;
+    ClientInfo *pClientInfo;
+    int type;
 }SocketObj;
 #endif
 

@@ -19,13 +19,16 @@ case $Num in
   ./source/file_raw2pkt.c \
   ./source/file_pkt2raw.c \
   ./source/base_stun.c \
+  ./source/stun_list.c \
   -I./include/ \
   -L./ \
   -L/usr/local/lib \
   -L/usr/lib \
   -lpthread -ldl \
-  -lxcb-shm -lxcb-xfixes -lxcb-render -lxcb-shape -lxcb -lXau -lXdmcp -lX11 -lXext -lXv \
-  -lasound -lz -lstdc++ -lm -lbz2 -lva -lva-drm -lva-x11 -lvdpau -llzma
+  -lz -lstdc++ -lm
+  #-lbz2 -llzma
+  #-lxcb-shm -lxcb-xfixes -lxcb-render -lxcb-shape -lxcb -lXau -lXdmcp -lX11 -lXext -lXv \
+  #-lasound  -lva -lva-drm -lva-x11 -lvdpau
 ;;
 2)
 

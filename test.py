@@ -33,14 +33,6 @@ import numpy as np
 #import cv2
 import random
 
-if sys.version_info >= (3, 0):
-    import tkinter as tk
-    from tkinter import *
-    import tkinter.ttk as ttk
-else:
-    import Tkinter as tk
-    from Tkinter import *
-    import ttk
 
 
 #sys.stdout = io.TextIOWrapper(sys.stdout.buffer,encoding='utf-8')
@@ -48,6 +40,17 @@ else:
 sys.path.append(".")
 
 gload = None
+
+global_port = 10080
+global_host = 'localhost'
+global_type = 0
+
+if len(sys.argv) > 3:
+    global_port = int(sys.argv[3])
+if len(sys.argv) > 2:
+    global_host = sys.argv[2]
+if len(sys.argv) > 1:
+    global_type = int(sys.argv[1])
 
 class LoadLib(object):
     def __init__(self):
@@ -94,6 +97,41 @@ class LoadLib(object):
 
 gload = LoadLib()
 
+def RunServer():
+    print("RunServer: (global_host, global_port)=", global_host, global_port)
+    handle_size = 8
+    handle = create_string_buffer(handle_size)
+
+    ret = gload.lib.api_socket_start(handle, global_host.encode('utf-8'), global_port, 0)
+    idx = 0
+    while idx >= 0 and idx < 4:
+        if sys.version_info >= (3, 0):
+            idx = int(input('please input to exit(eg: 0 ): '))
+        else:
+            idx = int(raw_input('please input to exit(eg: 0 ): '))
+        print("idx= ", idx)
+        #thread.status = False if idx == 0 else True
+    print("RunServer: start stop...")
+    ret = gload.lib.api_socket_stop(handle)
+    print("RunServer: over")
+def RunClient():
+    print("RunClient: (global_host, global_port)=", global_host, global_port)
+    handle_size = 8
+    handle = create_string_buffer(handle_size)
+
+    ret = gload.lib.api_socket_start(handle, global_host.encode('utf-8'), global_port, 1)
+    ret = gload.lib.api_socket_test(handle)
+    idx = 0
+    while idx >= 0 and idx < 4:
+        if sys.version_info >= (3, 0):
+            idx = int(input('please input to exit(eg: 0 ): '))
+        else:
+            idx = int(raw_input('please input to exit(eg: 0 ): '))
+        print("idx= ", idx)
+        #thread.status = False if idx == 0 else True
+    print("RunClient: start stop...")
+    ret = gload.lib.api_socket_stop(handle)
+    print("RunClient: over")
 def TestLocal():
     start_time = time.time()
     ifilename = '/home/gxh/works/datashare/InToTree_1920x1080.yuv'
@@ -120,5 +158,12 @@ def TestSock():
 if __name__ == '__main__':
     print('Start pycall.')
     #TestLocal()
-    TestSock()
+    #TestSock()
+    if global_type == 0:
+        RunServer()
+    else:
+        RunClient()
     print('End pycall.')
+
+#python test.py 0 10.200.3.208
+#python test.py 1 47.92.7.66
