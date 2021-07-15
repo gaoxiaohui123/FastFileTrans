@@ -69,7 +69,7 @@ case $Num in
   export QSVINC=$THIRD_PARTY_PATH/mingw32/include
   echo "build for windows"
   gcc -o ./libqft.dll -shared -fPIC \
-	-Wl,--output-def,./libhcsvcapi.def,--out-implib,./libhcsvcapi.lib \
+	-Wl,--output-def,./libqft.def,--out-implib,./libqft.lib \
 	-Wno-int-to-pointer-cast -Wno-pointer-to-int-cast \
 	-Wformat=0 -Wl,-Bsymbolic -fvisibility=hidden -ldl -Wl,-rpath=. \
 	-Xlinker --unresolved-symbols=ignore-in-shared-libs \
