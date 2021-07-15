@@ -65,7 +65,29 @@ case $Num in
   -lz -lstdc++ -lm
 ;;
 3)
-
+  echo "build for windows"
+  gcc -o ./libqft.dll -shared -fPIC \
+	-Wl,--output-def,./libhcsvcapi.def,--out-implib,./libhcsvcapi.lib \
+	-Wno-int-to-pointer-cast -Wno-pointer-to-int-cast \
+	-Wformat=0 -Wl,-Bsymbolic -fvisibility=hidden -ldl -Wl,-rpath=. \
+	-Xlinker --unresolved-symbols=ignore-in-shared-libs \
+	-Wno-deprecated-declarations \
+  -Wno-incompatible-pointer-types \
+  -Wno-implicit-function-declaration \
+  -Wno-int-conversion \
+  -Wno-pointer-to-int-cast \
+  -Wno-discarded-qualifiers \
+  ./source/file_rtp.c \
+  ./source/file_raw2pkt.c \
+  ./source/file_pkt2raw.c \
+  ./source/base_stun.c \
+  ./source/stun_list.c \
+  -I./include/ \
+  -L./ \
+  -L/usr/local/lib \
+  -L/usr/lib \
+  -lpthread -ldl \
+  -lz -lstdc++ -lm
 ;;
 4)
 
