@@ -34,7 +34,7 @@ case $Num in
   echo "build for macosx"
   export DYLD_LIBRARY_PATH=`pwd`
 
-  gcc -dynamiclib -o .libqft.dylib \
+  gcc -dynamiclib -o ./libqft.dylib \
   -Wformat=0 -fvisibility=hidden -ldl \
   -Wl,-rpath,./ \
   -Xlinker \
