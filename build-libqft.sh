@@ -87,7 +87,13 @@ case $Num in
   -L/usr/local/lib \
   -L/usr/lib \
   -lpthread -ldl \
-  -lz -lstdc++ -lm
+  -lz -lstdc++ -lm \
+	-lpthread -lws2_32 -ldl -llzma -lbz2 \
+	-limagehlp -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 \
+	-loleaut32 -lshell32 -lversion -luuid -lOpenGL32 \
+	-lwinspool -lcomctl32 -lcomdlg32 -lctl3d32 -ladvapi32 -lwsock32 -lkernel32 -luser32 \
+	-lrt -lstrmiids -lquartz -liconv -lvfw32 -lshlwapi \
+	-lSecur32 -lBcrypt -lMfplat
 ;;
 4)
 
