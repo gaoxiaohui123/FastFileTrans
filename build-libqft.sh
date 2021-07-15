@@ -34,15 +34,24 @@ case $Num in
   echo "build for macosx"
   eexport DYLD_LIBRARY_PATH=`pwd`
 
-  gcc -dynamiclib -o .libqft.dylib -shared -fPIC  -Wformat=0 \
-  -fvisibility=hidden -ldl -Wl,-rpath=. \
-  -Xlinker --unresolved-symbols=ignore-in-shared-libs \
+  gcc -dynamiclib -o .libqft.dylib \
+  -Wformat=0 -fvisibility=hidden -ldl \
+  -Wl,-rpath,./ \
+  -Xlinker \
+  -w \
   -Wno-deprecated-declarations \
   -Wno-incompatible-pointer-types \
   -Wno-implicit-function-declaration \
   -Wno-int-conversion \
   -Wno-pointer-to-int-cast \
-  -Wno-discarded-qualifiers \
+  -Wno-ignored-qualifiers \
+  -Wno-unused-value \
+  -Wno-pointer-sign \
+  -Wno-absolute-value \
+  -Wno-parentheses-equality \
+  -Wno-logical-not-parentheses \
+  -Wno-pointer-bool-conversion \
+  -Wno-return-type \
   ./source/file_rtp.c \
   ./source/file_raw2pkt.c \
   ./source/file_pkt2raw.c \
