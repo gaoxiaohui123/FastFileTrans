@@ -660,8 +660,7 @@ int api_socket_test(char *handle)
                 getsockname(obj->sock_fd, (struct sockaddr*)&localaddr, &slen);
                 int local_port = (int)ntohs(localaddr.sin_port);
                 char *p_local_ip = inet_ntoa(localaddr.sin_addr);
-                printf("api_socket_test: p_local_ip: %s\n", p_local_ip);
-                printf("api_socket_test: local_port: %d\n", local_port);
+                printf("api_socket_test: p_local_ip: %s, local_port=%d \n", p_local_ip, local_port);
                 obj->local_port = (uint16_t)local_port;
                 strcpy(obj->local_ip, p_local_ip);
                 obj->stunInfo.local_port = obj->local_port;
