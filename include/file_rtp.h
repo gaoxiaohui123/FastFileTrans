@@ -32,13 +32,11 @@ EXTERNC {
 #include <math.h>
 #include <fcntl.h>
 #include <pthread.h>
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 #if defined (WIN32)
 #include <winsock2.h>
-#include<ws2tcpip.h>
+#include <ws2tcpip.h>
+#include <windows.h>
 #else
 #include <sys/ioctl.h>
 #include <sys/socket.h>
