@@ -81,7 +81,7 @@ int get_ip_by_domain(const char *domain, char *ip)
 
     return -1;
 }
-#if 1
+#if 0
 // 获取本机mac
 int get_local_mac(const char *eth_inf, char *mac)
 {
@@ -729,8 +729,8 @@ int main(void)
     get_ip_by_domain(test_domain, ip);
     printf("%s ip: %s\n", test_domain, ip);
 
-    get_local_mac(test_eth, mac);
-    printf("local %s mac: %s\n", test_eth, mac);
+    //get_local_mac(test_eth, mac);
+    //printf("local %s mac: %s\n", test_eth, mac);
 
     //get_local_ip(test_eth, ip);
     //printf("local %s ip: %s\n", test_eth, ip);
