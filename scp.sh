@@ -11,7 +11,7 @@ DST_DIR=/home/gxh/works/huichang/
 scp $DST_DIR/FastFileTrans/scp.sh $SRC_DIR/FastFileTrans/
 scp $DST_DIR/FastFileTrans/source/base_stun.c $SRC_DIR/FastFileTrans/source/
 #scp $DST_DIR/FastFileTrans/source/stun_list.c $SRC_DIR/FastFileTrans/source/
-#scp $DST_DIR/FastFileTrans/include/file_rtp.h $SRC_DIR/FastFileTrans/include/
+scp $DST_DIR/FastFileTrans/include/file_rtp.h $SRC_DIR/FastFileTrans/include/
 #scp -r $SRC_DIR/FastFileTrans $DST_DIR/ 
 
 

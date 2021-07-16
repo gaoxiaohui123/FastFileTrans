@@ -356,6 +356,10 @@ typedef struct{
 }FileRtpObj;
 
 #if 1
+//#define HEARTBEAT_TIME  20000 //20s
+#define HEARTBEAT_TIME  2000 //2s //test
+#define MAX_MTU_SIZE 1400
+
 typedef enum{
     kReg = 1,
     kPing,
@@ -386,6 +390,7 @@ struct CStunInfo {
     int id;
     StunInfo *data;
     int size;
+    struct sockaddr_in addr_client;
     struct CStunInfo *tail;
     struct CStunInfo *next;
 };

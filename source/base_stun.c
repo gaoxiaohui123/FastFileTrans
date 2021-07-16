@@ -267,7 +267,7 @@ int send_data(SocketObj *obj, char *data, int size, struct sockaddr_in addr_clie
 int heart_beat_run(SocketObj *obj)
 {
     int ret = 0;
-    int interval = 20 * 1000;
+    int interval = HEARTBEAT_TIME;
     while(obj->status)
     {
         int64_t now_time = (int64_t)api_get_sys_time(0);
@@ -310,6 +310,41 @@ int heart_beat_run(SocketObj *obj)
     pthread_exit((void*)p);
     return ret;
 }
+int send_stun_list(SocketObj *obj, CStunNode *head, CStunNode *pnew, struct sockaddr_in addr_client, int64_t now_time)
+{
+    int ret = 0;
+    if(head->num > 1)
+    {
+        char send_buf[MAX_MTU_SIZE] = "";
+        int data_len = MAX_MTU_SIZE;
+        int offset = 0;
+        int info_size = sizeof(StunInfo);
+        //send the new client to others
+        CStunNode *p;
+        p = head;
+        do{
+            p = p->next;
+            CStunNode *info = (CStunNode *)p;
+            if(p)
+            {
+                ret = send_data(obj, pnew->data, info_size, p->addr_client, now_time);//send the new client to others
+                memcpy(&send_buf[offset], p->data, info_size);
+                offset += info_size;
+                if((offset + info_size) > MAX_MTU_SIZE)
+                {
+                    ret = send_data(obj, send_buf, offset, addr_client, now_time);//send others to the new client
+                    offset = 0;
+                }
+            }
+        }while(p->next);
+        if(offset > 0)
+        {
+            ret = send_data(obj, send_buf, offset, addr_client, now_time);//send others to the new client
+            offset = 0;
+        }
+    }
+    return ret;
+}
 int server_recv_run(SocketObj *obj)
 {
     int ret = 0;
@@ -319,8 +354,8 @@ int server_recv_run(SocketObj *obj)
     obj->status = 1;
     while(obj->status)
     {
-        char recv_buf[1500] = "";
-        int data_len = 1500;
+        char recv_buf[MAX_MTU_SIZE] = "";
+        int data_len = MAX_MTU_SIZE;
         int recv_num = recvfrom(obj->sock_fd, recv_buf, data_len, 0, (struct sockaddr *)&addr_client, (socklen_t *)&len);
 
         if(recv_num <= 0)
@@ -371,10 +406,12 @@ int server_recv_run(SocketObj *obj)
                     CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
                     pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
                     memcpy(pnew->data, p, sizeof(StunInfo));
+                    pnew->addr_client = addr_client;
                     stun_add_node(thisClientInfo->head, &pnew);
                     ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
                 }
-                else{
+                else if(this_session_id > 0 && (this_session_id <= glob_session_id))
+                {
                     ClientInfo *thisClientInfo = &obj->pClientInfo[this_session_id % MAX_ONLINE_NUM];
                     if(thisClientInfo->head)
                     {
@@ -385,8 +422,10 @@ int server_recv_run(SocketObj *obj)
 		                	    CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
                                 pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
                                 memcpy(pnew->data, p, sizeof(StunInfo));
+                                pnew->addr_client = addr_client;
                                 stun_add_node(thisClientInfo->head, &pnew);
-                                ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+                                //ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+                                ret = send_stun_list(obj, thisClientInfo->head, pnew, addr_client, now_time);
 		                	    break;
 		                	}
 		                	case kHeartBeat:
@@ -419,7 +458,9 @@ int server_recv_run(SocketObj *obj)
                         MYPRINT2("server_recv_run: cmdtype=%d, thisClientInfo->head=%x \n", cmdtype, thisClientInfo->head);
                     }
                 }
-
+                else{
+                    MYPRINT2("warning: server_recv_run: this_session_id=%u, glob_session_id=%u \n", this_session_id, glob_session_id);
+                }
             }
 
         }
@@ -494,8 +535,8 @@ int client_recv_run(SocketObj *obj)
     obj->status = 1;
     while(obj->status)
     {
-        char recv_buf[1500] = "";
-        int data_len = 1500;
+        char recv_buf[MAX_MTU_SIZE] = "";
+        int data_len = MAX_MTU_SIZE;
         int recv_num = recvfrom(obj->sock_fd, recv_buf, data_len, 0, (struct sockaddr *)&addr_client, (socklen_t *)&len);
 
         if(recv_num <= 0)
@@ -539,6 +580,7 @@ int client_recv_run(SocketObj *obj)
                     CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
                     pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
                     memcpy(pnew->data, p, sizeof(StunInfo));
+                    pnew->addr_client = addr_client;
                     stun_add_node(thisClientInfo->head, &pnew);
                     memcpy(&obj->stunInfo, p, sizeof(StunInfo));
                     //
