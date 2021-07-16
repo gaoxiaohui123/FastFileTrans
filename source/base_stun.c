@@ -407,7 +407,8 @@ int server_recv_run(SocketObj *obj)
                     pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
                     memcpy(pnew->data, p, sizeof(StunInfo));
                     pnew->addr_client = addr_client;
-                    stun_add_node(thisClientInfo->head, &pnew);
+                    int client_id = stun_add_node(thisClientInfo->head, &pnew);
+                    p->client_id = client_id;
                     ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
                 }
                 else if(this_session_id > 0 && (this_session_id <= glob_session_id))
@@ -423,8 +424,9 @@ int server_recv_run(SocketObj *obj)
                                 pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
                                 memcpy(pnew->data, p, sizeof(StunInfo));
                                 pnew->addr_client = addr_client;
-                                stun_add_node(thisClientInfo->head, &pnew);
-                                //ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+                                int client_id = stun_add_node(thisClientInfo->head, &pnew);
+                                p->client_id = client_id;
+                                ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
                                 ret = send_stun_list(obj, thisClientInfo->head, pnew, addr_client, now_time);
 		                	    break;
 		                	}
@@ -535,8 +537,9 @@ int client_recv_run(SocketObj *obj)
     obj->status = 1;
     while(obj->status)
     {
-        char recv_buf[MAX_MTU_SIZE] = "";
         int data_len = MAX_MTU_SIZE;
+        int info_size = sizeof(StunInfo);
+        char recv_buf[MAX_MTU_SIZE] = "";
         int recv_num = recvfrom(obj->sock_fd, recv_buf, data_len, 0, (struct sockaddr *)&addr_client, (socklen_t *)&len);
 
         if(recv_num <= 0)
@@ -559,6 +562,7 @@ int client_recv_run(SocketObj *obj)
             int64_t now_time = (int64_t)api_get_sys_time(0);
             int remote_port = addr_client.sin_port;
             char *p_remote_ip = inet_ntoa(addr_client.sin_addr);
+            //
             char *data = recv_buf;
             StunInfo *p = (StunInfo *)data;
             uint32_t this_session_id = p->session_id;

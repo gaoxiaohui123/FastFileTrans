@@ -20,8 +20,9 @@ int stun_create_node(CStunNode **head0)
     return 0;
 }
 
-void stun_add_node(CStunNode *head, CStunNode **pnew)
+int stun_add_node(CStunNode *head, CStunNode **pnew)
 {
+    int ret = 0;
     //MYPRINT2("stun_add_node: (*pnew)=%x \n", (*pnew));
     if(!(*pnew))
     {
@@ -32,10 +33,12 @@ void stun_add_node(CStunNode *head, CStunNode **pnew)
     head->tail->next = *pnew;  //新节点插入到表尾
     head->tail = *pnew;   //为指针指向当前的尾节点
     head->id++;
+    (*pnew)->data->client_id = head->id;
     head->num++;
     (*pnew)->id = head->id;
     //MYPRINT2("stun_add_node: head->num=%d, (*pnew)->id=%d \n", head->num, (*pnew)->id);
-
+    ret = head->id;
+    return ret;
 }
 void stun_add_node_by_id(CStunNode *head, char *data, int size, int id)
 {

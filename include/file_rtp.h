@@ -381,6 +381,7 @@ typedef struct{
     unsigned int passwd;
     unsigned int cmdtype : 8;
     unsigned int actor : 3;
+    unsigned int client_id : 16;
     unsigned int time_stamp0;
     unsigned int time_stamp1;
 }StunInfo;
