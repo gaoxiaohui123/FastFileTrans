@@ -359,6 +359,7 @@ typedef struct{
 typedef enum{
     kReg = 1,
     kPing,
+    kHeartBeat,
     kBye,
     kExit,
 }CMDType;
@@ -401,6 +402,7 @@ typedef struct{
     char server_ip[64];
     pthread_mutex_t lock;
     pthread_t recv_pid;
+    pthread_t hb_pid;
     pthread_t send_pid;
     int status;
     StunInfo stunInfo;
@@ -408,6 +410,7 @@ typedef struct{
     unsigned short local_port;
     ClientInfo *pClientInfo;
     int type;
+    int64_t last_send_time;
 }SocketObj;
 #endif
 

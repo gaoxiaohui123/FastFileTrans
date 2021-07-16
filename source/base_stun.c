@@ -216,18 +216,35 @@ int get_local_port(SOCKFD fd)
 }
 #endif
 
+
 int socket_close(SocketObj *obj)
 {
     int ret = 0;
-    char *p0;
-    if (pthread_join(obj->recv_pid, (void**)&p0))
+    if(obj->recv_pid > 0)
     {
-        MYPRINT2("socket_close: xxx_recv_run thread is not exit...\n");
+        char *p0;
+        if (pthread_join(obj->recv_pid, (void**)&p0))
+        {
+            MYPRINT2("socket_close: xxx_recv_run thread is not exit...\n");
+        }
+        else{
+            MYPRINT2("socket_close: p0=%s \n", p0);
+            free(p0);
+        }
     }
-    else{
-        MYPRINT2("socket_close: p0=%s \n", p0);
-        free(p0);
+    if(obj->hb_pid > 0)
+    {
+        char *p0;
+        if (pthread_join(obj->hb_pid, (void**)&p0))
+        {
+            MYPRINT2("socket_close: xxx_hb_run thread is not exit...\n");
+        }
+        else{
+            MYPRINT2("socket_close: p0=%s \n", p0);
+            free(p0);
+        }
     }
+
 
 #if defined (WIN32)
     closesocket(obj->sock_fd);
@@ -237,11 +254,60 @@ int socket_close(SocketObj *obj)
     pthread_mutex_destroy(&obj->lock);
     return ret;
 }
-int send_data(SocketObj *obj, char *data, int size, struct sockaddr_in addr_client)
+int send_data(SocketObj *obj, char *data, int size, struct sockaddr_in addr_client, int64_t now_time)
 {
     int ret = 0;
     int len = sizeof(addr_client);
+    pthread_mutex_lock(&obj->lock);
     ret = sendto(obj->sock_fd, data, size, 0, (struct sockaddr *)&addr_client, len);
+    obj->last_send_time = now_time;
+    pthread_mutex_unlock(&obj->lock);
+    return ret;
+}
+int heart_beat_run(SocketObj *obj)
+{
+    int ret = 0;
+    int interval = 20 * 1000;
+    while(obj->status)
+    {
+        int64_t now_time = (int64_t)api_get_sys_time(0);
+        pthread_mutex_lock(&obj->lock);
+        int64_t last_time = obj->last_send_time;//  # 避免意外包
+        pthread_mutex_unlock(&obj->lock);
+        if(last_time)
+        {
+            int difftime = (int)(now_time - last_time);
+            //interval = HEARTBEAT_TIME
+            int wait_time = (interval - difftime);// #199, 200, 300
+            wait_time = wait_time < 1000 ? 1000 : wait_time;
+            //# 周期内无网络传输；
+            //# 周期内有网络传输，且在100秒前;
+            //# 100秒内已发生过网络传输，则取消当下发送；
+            //# 心跳包最大间隔为为300s
+            if(difftime > interval)
+            {
+                char data[300] = "";
+                StunInfo *p = (StunInfo *)data;
+                memcpy(p, &obj->stunInfo, sizeof(StunInfo));
+                //
+	            p->time_stamp0 = now_time & 0xFFFFFFFF;
+	            p->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
+	            p->cmdtype = kHeartBeat;
+                ret = send_data(obj, data, sizeof(StunInfo), obj->addr_serv, now_time);
+                ret = 1;
+            }
+            else{
+                usleep(wait_time * 1000);
+            }
+        }
+        else{
+            usleep(1000 * 1000);//1s
+        }
+    }
+    //
+    char *p = malloc(32);
+    strcpy(p,"heart_beat_run exit");
+    pthread_exit((void*)p);
     return ret;
 }
 int server_recv_run(SocketObj *obj)
@@ -282,13 +348,13 @@ int server_recv_run(SocketObj *obj)
                 StunInfo *p = (StunInfo *)data;
                 CMDType cmdtype = p->cmdtype;
                 uint32_t this_session_id = p->session_id;
-                MYPRINT2("server_recv_run: p->local_ip=%s, p->local_port=%d \n", p->local_ip, p->local_port);
+                MYPRINT2("server_recv_run: addr0= %s:%d \n", p->local_ip, p->local_port);
                 //
                 uint64_t time_stamp0 = p->time_stamp0;
 	            uint64_t time_stamp1 = p->time_stamp1;
 	            int64_t packet_time_stamp = time_stamp0 | (time_stamp1 << 32);
 	            int delay_time = (int)(now_time - packet_time_stamp);
-	            MYPRINT2("server_recv_run: p_remote_ip=%s, remote_port=%d, delay_time=%d \n", p_remote_ip, remote_port, delay_time);
+	            MYPRINT2("server_recv_run: addr1= %s:%d, delay_time=%d \n", p_remote_ip, remote_port, delay_time);
 
                 strcpy(p->remote_ip, p_remote_ip);
                 p->remote_port = (uint16_t)remote_port;
@@ -306,6 +372,7 @@ int server_recv_run(SocketObj *obj)
                     pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
                     memcpy(pnew->data, p, sizeof(StunInfo));
                     stun_add_node(thisClientInfo->head, &pnew);
+                    ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
                 }
                 else{
                     ClientInfo *thisClientInfo = &obj->pClientInfo[this_session_id % MAX_ONLINE_NUM];
@@ -319,28 +386,40 @@ int server_recv_run(SocketObj *obj)
                                 pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
                                 memcpy(pnew->data, p, sizeof(StunInfo));
                                 stun_add_node(thisClientInfo->head, &pnew);
+                                ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+		                	    break;
+		                	}
+		                	case kHeartBeat:
+		                	{
+		                	    MYPRINT2("server_recv_run: kHeartBeat: cmdtype=%d \n", cmdtype);
+		                	    ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
 		                	    break;
 		                	}
 		                	case kBye:
 		                	{
+		                	    MYPRINT2("server_recv_run: kBye: cmdtype=%d ############################ \n", cmdtype);
+		                	    ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
 		                	    break;
 		                	}
 		                	case kExit:
 		                	{
 		                	    ClientInfo *thisClientInfo = &obj->pClientInfo[this_session_id % MAX_ONLINE_NUM];
                                 stun_free_node(thisClientInfo->head);
+                                ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
 		                	    break;
 		                	}
 		                	default:
+		                	{
 		                	    MYPRINT2("server_recv_run: cmdtype=%d \n", cmdtype);
 		                		break;
+		                	}
 		                }
                     }
                     else{
                         MYPRINT2("server_recv_run: cmdtype=%d, thisClientInfo->head=%x \n", cmdtype, thisClientInfo->head);
                     }
                 }
-                ret = send_data(obj, data, sizeof(StunInfo), addr_client);
+
             }
 
         }
@@ -449,8 +528,8 @@ int client_recv_run(SocketObj *obj)
 	        int64_t packet_time_stamp = time_stamp0 | (time_stamp1 << 32);
 	        int delay_time = (int)(now_time - packet_time_stamp);
 	        MYPRINT2("client_recv_run: p_remote_ip=%s, remote_port=%d, delay_time=%d \n", p_remote_ip, remote_port, delay_time);
-            MYPRINT2("client_recv_run: p->remote_ip=%s, p->remote_port=%d, this_session_id=%d \n", \
-            p->remote_ip, p->remote_port, this_session_id);
+            MYPRINT2("client_recv_run: session_id %d addr1= %s:%d \n", \
+            this_session_id, p->remote_ip, p->remote_port);
             if(this_session_id > 0)
             {
                 if(!obj->stunInfo.session_id)
@@ -462,6 +541,9 @@ int client_recv_run(SocketObj *obj)
                     memcpy(pnew->data, p, sizeof(StunInfo));
                     stun_add_node(thisClientInfo->head, &pnew);
                     memcpy(&obj->stunInfo, p, sizeof(StunInfo));
+                    //
+                    p->cmdtype = kBye;
+                    ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);//test
                 }
                 else{
                     if(obj->stunInfo.session_id != this_session_id)
@@ -555,6 +637,10 @@ int client_init(SocketObj *obj)
     {
         MYPRINT2("client_init: Create client_recv_run failed!\n");
     }
+    if(pthread_create(&obj->hb_pid, NULL, heart_beat_run, obj) < 0)
+    {
+        MYPRINT2("client_init: Create heart_beat_run failed!\n");
+    }
 
     return ret;
 }
@@ -618,7 +704,7 @@ int api_socket_stop(char *handle)
     return ret;
 }
 FQT_API
-int api_socket_test(char *handle)
+int api_socket_test(char *handle, int session_id)
 {
     int ret = 0;
     int64_t *testp = (int64_t *)handle;
@@ -629,6 +715,7 @@ int api_socket_test(char *handle)
         int send_size = 300;
         int delay_time0 = 500 * 1000;
         int i = 0;
+        obj->stunInfo.session_id = session_id;
         do{
             char *data = send_buf;
             StunInfo *p = (StunInfo *)data;
@@ -651,7 +738,7 @@ int api_socket_test(char *handle)
             int64_t now_time = (int64_t)api_get_sys_time(0);
 			p->time_stamp0 = now_time & 0xFFFFFFFF;
 			p->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
-            ret = send_data(obj, data, sizeof(StunInfo), obj->addr_serv);
+            ret = send_data(obj, data, sizeof(StunInfo), obj->addr_serv, now_time);
             if(true)
             {
                 struct sockaddr_in localaddr = {};
@@ -660,7 +747,7 @@ int api_socket_test(char *handle)
                 getsockname(obj->sock_fd, (struct sockaddr*)&localaddr, &slen);
                 int local_port = (int)ntohs(localaddr.sin_port);
                 char *p_local_ip = inet_ntoa(localaddr.sin_addr);
-                printf("api_socket_test: p_local_ip: %s, local_port=%d \n", p_local_ip, local_port);
+                printf("api_socket_test: addr0= %s:%d \n", p_local_ip, local_port);
                 obj->local_port = (uint16_t)local_port;
                 strcpy(obj->local_ip, p_local_ip);
                 obj->stunInfo.local_port = obj->local_port;
@@ -676,6 +763,7 @@ int api_socket_test(char *handle)
     }
     return ret;
 }
+#if 0
 FQT_API
 int api_sock_test(char *server_ip, int port)
 {
@@ -702,7 +790,8 @@ int api_sock_test(char *server_ip, int port)
     int delay_time0 = 500 * 1000;
     int i = 0;
     do{
-        ret = send_data(client, send_buf, send_size, client->addr_serv);
+        int64_t now_time = (int64_t)api_get_sys_time(0);
+        ret = send_data(client, send_buf, send_size, client->addr_serv, now_time);
         send_size += 10;
         i++;
         int delay_time = delay_time0 * i;
@@ -737,19 +826,4 @@ int main(void)
 
     return 0;
 }
-#if 0
-struct sockaddr_in localaddr;
-    ///一定要给出结构体大小，要不然获取到的端口号可能是0
-    socklen_t len = sizeof(localaddr);　　　　///fd是创建的套接字
-    int ret = getsockname(fd, (struct sockaddr*)&localaddr, &len);
-
-    if(ret != 0)
-    {
-        perror("getsockname");
-    }
-    else
-    {
-        perror("getsockname");
-        printf("port: %d\n", ntohs(localaddr.sin_port));
-    }
 #endif

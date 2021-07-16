@@ -44,7 +44,10 @@ gload = None
 global_port = 10080
 global_host = 'localhost'
 global_type = 0
+global_session_id = 0
 
+if len(sys.argv) > 4:
+    global_session_id = int(sys.argv[4])
 if len(sys.argv) > 3:
     global_port = int(sys.argv[3])
 if len(sys.argv) > 2:
@@ -120,7 +123,7 @@ def RunClient():
     handle = create_string_buffer(handle_size)
 
     ret = gload.lib.api_socket_start(handle, global_host.encode('utf-8'), global_port, 1)
-    ret = gload.lib.api_socket_test(handle)
+    ret = gload.lib.api_socket_test(handle, global_session_id)
     idx = 0
     while idx >= 0 and idx < 4:
         if sys.version_info >= (3, 0):
