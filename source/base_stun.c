@@ -52,7 +52,7 @@
 //int get_local_ip(const char *eth_inf, char *ip); // 获取本机ip
 
 extern int stun_create_node(CStunNode **head0);
-extern void stun_add_node(CStunNode *head, CStunNode **pnew);
+extern int stun_add_node(CStunNode *head, CStunNode **pnew);
 extern void stun_delete_node(CStunNode *head);
 extern void stun_free_node(CStunNode *head);
 
