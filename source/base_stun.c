@@ -278,6 +278,16 @@ int socket_close(SocketObj *obj)
     pthread_mutex_destroy(&obj->lock);
     return ret;
 }
+int node_send_data(SocketObj *obj, char *data, int size, struct sockaddr_in addr_client, int64_t now_time)
+{
+    int ret = 0;
+    int len = sizeof(addr_client);
+    pthread_mutex_lock(&obj->lock);
+    ret = sendto(obj->sock_fd, data, size, 0, (struct sockaddr *)&addr_client, len);
+    //obj->last_send_time = now_time;
+    pthread_mutex_unlock(&obj->lock);
+    return ret;
+}
 int send_data(SocketObj *obj, char *data, int size, struct sockaddr_in addr_client, int64_t now_time)
 {
     int ret = 0;
@@ -292,6 +302,7 @@ int heart_beat_run(SocketObj *obj)
 {
     int ret = 0;
     int interval = HEARTBEAT_TIME;
+    MYPRINT2("heart_beat_run: start \n");
     while(obj->status)
     {
         int64_t now_time = (int64_t)api_get_sys_time(0);
@@ -321,6 +332,7 @@ int heart_beat_run(SocketObj *obj)
                 ret = 1;
             }
             else{
+                MYPRINT("heart_beat_run: difftime=%d \n", difftime);
                 usleep(wait_time * 1000);
             }
         }
@@ -346,6 +358,7 @@ int send_stun_list(SocketObj *obj, CStunNode *head, CStunNode *pnew, struct sock
         int info_size = sizeof(StunInfo);
         uint32_t session_id = pnew->data->session_id;
         uint32_t self_session_id = pnew->data->self_session_id;
+        MYPRINT2("send_stun_list: self_session_id=%d \n", self_session_id);
         //send the new client to others
         CStunNode *p;
         p = head;
@@ -355,6 +368,7 @@ int send_stun_list(SocketObj *obj, CStunNode *head, CStunNode *pnew, struct sock
             if(p)
             {
                 p->data->cmdtype = kPeers;
+                MYPRINT2("send_stun_list: p->data->self_session_id=%d \n", p->data->self_session_id);
                 if(p->data->self_session_id != self_session_id)
                 {
                     ret = send_data(obj, pnew->data, info_size, p->addr_client, now_time);//send the new client to others
@@ -368,6 +382,7 @@ int send_stun_list(SocketObj *obj, CStunNode *head, CStunNode *pnew, struct sock
                 }
             }
         }while(p->next);
+        MYPRINT2("send_stun_list: offset=%d \n", offset);
         if(offset > 0)
         {
             ret = send_data(obj, send_buf, offset, addr_client, now_time);//send others to the new client
@@ -568,7 +583,7 @@ int ping_loop(SocketObj *obj, ClientInfo *thisClientInfo)
     int ret = 0;
     unsigned int self_session_id = obj->stunInfo.self_session_id;
     MYPRINT2("ping_loop: self_session_id=%u \n", self_session_id);
-    printf("ping_loop: addr0= %s:%d \n", obj->local_ip, (int)obj->local_port);
+    MYPRINT2("ping_loop: addr0= %s:%d \n", obj->local_ip, (int)obj->local_port);
     while(obj->status)
     {
         int64_t now_time = (int64_t)api_get_sys_time(0);
@@ -584,72 +599,78 @@ int ping_loop(SocketObj *obj, ClientInfo *thisClientInfo)
         p = head;
         do{
             p = p->next;
-            if(p && (p->data->self_session_id != self_session_id))
+            if(p)
             {
-                if(!(p->cnn_status & 1) && p->ping_times < 10)
+                MYPRINT("ping_loop: self_session_id=%d, p->data->self_session_id=%d \n", \
+                        self_session_id, p->data->self_session_id);
+                if(p->data->self_session_id != self_session_id)
                 {
-                    MYPRINT2("ping_loop: p->ping_times=%d, p->data->self_session_id=%d \n", \
-                    p->ping_times, p->data->self_session_id);
-                    struct sockaddr_in addr_client;
-                    memset(&addr_client, 0, sizeof(addr_client));
-                    addr_client.sin_family = AF_INET;
-                    //外网通了，内网没通，则继续stun指导１０次
-                    if(!(p->cnn_status & 1))
+                    if(!(p->cnn_status & 1) && p->ping_times < 10)
                     {
-                        addr_client.sin_port = htons(p->data->local_port);
-                        addr_client.sin_addr.s_addr = inet_addr(p->data->local_ip);
-                        p->last_send_time = now_time;
-                        pthread_mutex_unlock(&obj->lock);
-                        MYPRINT2("ping_loop: addr0: %s:%d \n", p->data->local_ip, p->data->local_port);
-                        ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
-                        pthread_mutex_lock(&obj->lock);
-                    }
-                    //
-                    if(!(p->cnn_status & 2))
-                    {
-                        addr_client.sin_port = htons(p->data->remote_port);
-                        addr_client.sin_addr.s_addr = inet_addr(p->data->remote_ip);
-                        p->last_send_time = now_time;
-                        pthread_mutex_unlock(&obj->lock);
-                        MYPRINT2("ping_loop: addr1: %s:%d \n", p->data->remote_ip, p->data->remote_port);
-                        ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
-                        pthread_mutex_lock(&obj->lock);
-                    }
-                    //
-                    p->ping_times++;
-                }
-                else if(p->cnn_status)
-                {
-                    int64_t last_time = p->last_send_time;
-                    int difftime = (int)(now_time - last_time);
-                    int interval = HEARTBEAT_TIME;
-                    //int wait_time = (interval - difftime);// #199, 200, 300
-                    //wait_time = wait_time < 1000 ? 1000 : wait_time;
-                    //# 周期内无网络传输；
-                    //# 周期内有网络传输，且在100秒前;
-                    //# 100秒内已发生过网络传输，则取消当下发送；
-                    //# 心跳包最大间隔为为300s
-                    if(difftime > interval)
-                    {
-                        stunInfo.cmdtype = kHeartBeat;
+                        MYPRINT2("ping_loop: p->ping_times=%d, p->data->self_session_id=%d \n", \
+                        p->ping_times, p->data->self_session_id);
                         struct sockaddr_in addr_client;
+                        memset(&addr_client, 0, sizeof(addr_client));
+                        addr_client.sin_family = AF_INET;
+                        //外网通了，内网没通，则继续stun指导１０次
                         if(!(p->cnn_status & 1))
                         {
                             addr_client.sin_port = htons(p->data->local_port);
                             addr_client.sin_addr.s_addr = inet_addr(p->data->local_ip);
-                            pthread_mutex_unlock(&obj->lock);
-                            ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
                             p->last_send_time = now_time;
+                            pthread_mutex_unlock(&obj->lock);
+                            MYPRINT2("ping_loop: addr0: %s:%d \n", p->data->local_ip, p->data->local_port);
+                            ret = node_send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
                             pthread_mutex_lock(&obj->lock);
                         }
-                        else if(!(p->cnn_status & 2))
+                        //
+                        if(!(p->cnn_status & 2))
                         {
                             addr_client.sin_port = htons(p->data->remote_port);
                             addr_client.sin_addr.s_addr = inet_addr(p->data->remote_ip);
-                            pthread_mutex_unlock(&obj->lock);
-                            ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
                             p->last_send_time = now_time;
+                            pthread_mutex_unlock(&obj->lock);
+                            MYPRINT2("ping_loop: addr1: %s:%d \n", p->data->remote_ip, p->data->remote_port);
+                            ret = node_send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
                             pthread_mutex_lock(&obj->lock);
+                        }
+                        //
+                        p->ping_times++;
+                    }
+                    else if(p->cnn_status)
+                    {
+                        MYPRINT2("ping_loop: p->cnn_status=%d \n", p->cnn_status);
+                        int64_t last_time = p->last_send_time;
+                        int difftime = (int)(now_time - last_time);
+                        int interval = HEARTBEAT_TIME;
+                        //int wait_time = (interval - difftime);// #199, 200, 300
+                        //wait_time = wait_time < 1000 ? 1000 : wait_time;
+                        //# 周期内无网络传输；
+                        //# 周期内有网络传输，且在100秒前;
+                        //# 100秒内已发生过网络传输，则取消当下发送；
+                        //# 心跳包最大间隔为为300s
+                        if(difftime > interval)
+                        {
+                            stunInfo.cmdtype = kHeartBeat;
+                            struct sockaddr_in addr_client;
+                            if(!(p->cnn_status & 1))
+                            {
+                                addr_client.sin_port = htons(p->data->local_port);
+                                addr_client.sin_addr.s_addr = inet_addr(p->data->local_ip);
+                                pthread_mutex_unlock(&obj->lock);
+                                ret = node_send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
+                                p->last_send_time = now_time;
+                                pthread_mutex_lock(&obj->lock);
+                            }
+                            else if(!(p->cnn_status & 2))
+                            {
+                                addr_client.sin_port = htons(p->data->remote_port);
+                                addr_client.sin_addr.s_addr = inet_addr(p->data->remote_ip);
+                                pthread_mutex_unlock(&obj->lock);
+                                ret = node_send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
+                                p->last_send_time = now_time;
+                                pthread_mutex_lock(&obj->lock);
+                            }
                         }
                     }
                 }
@@ -690,7 +711,6 @@ int client_recv_run(SocketObj *obj)
     //
     struct sockaddr_in addr_client;
     int len = sizeof(obj->addr_serv);
-    obj->status = 1;
     while(obj->status)
     {
         int data_len = MAX_MTU_SIZE;
@@ -783,7 +803,14 @@ int client_recv_run(SocketObj *obj)
                                 pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
                                 memcpy(pnew->data, p, sizeof(StunInfo));
                                 //pnew->addr_client = addr_client;
-                                if(p->self_session_id != thisClientInfo->head->session_id)
+                                //if(p->self_session_id != thisClientInfo->head->session_id)
+                                if(p->self_session_id == obj->stunInfo.self_session_id &&
+                                   thisClientInfo->head->session_id == obj->stunInfo.self_session_id)
+                                {
+                                    //owner拥有者
+                                    MYPRINT("client_init: owner: p->self_session_id=%d \n", p->self_session_id);
+                                }
+                                else
                                 {
                                     stun_add_node(thisClientInfo->head, &pnew);
                                 }
@@ -800,7 +827,7 @@ int client_recv_run(SocketObj *obj)
 		            	        {
 		            	            if(pthread_create(&obj->ping_pid1, NULL, ping1_run, obj) < 0)
                                     {
-                                        MYPRINT2("client_init: Create heart_beat_run failed!\n");
+                                        MYPRINT2("client_init: Create ping1_run failed!\n");
                                     }
 		            	        }
 		            	    }
@@ -811,7 +838,7 @@ int client_recv_run(SocketObj *obj)
 		            	        {
 		            	            if(pthread_create(&obj->ping_pid0, NULL, ping0_run, obj) < 0)
                                     {
-                                        MYPRINT2("client_init: Create heart_beat_run failed!\n");
+                                        MYPRINT2("client_init: Create ping0_run failed!\n");
                                     }
 		            	        }
 		            	    }
@@ -824,7 +851,7 @@ int client_recv_run(SocketObj *obj)
 		            	    if(!ack)
 		            	    {
 		            	        p->ack = 1;
-		            	        ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+		            	        ret = node_send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
 		            	    }
 		            	    else{
 		            	        int ip_type = p->ip_type;
@@ -887,25 +914,6 @@ int client_init(SocketObj *obj)
         perror("client_init: socket");
         return -1;
     }
-    struct sockaddr_in localaddr = {};
-    socklen_t slen;
-    localaddr.sin_family = AF_INET;
-    localaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    localaddr.sin_port = 0;
-
-    bind(obj->sock_fd, (struct sockaddr *)&localaddr, sizeof(sin));
-    //connect(obj->sock_fd, sizeof(sin));
-    /* Now bound,get the address */
-    if(false)
-    {
-        slen = sizeof(localaddr);
-        getsockname(obj->sock_fd, (struct sockaddr*)&localaddr, &slen);
-        int local_port = (int)ntohs(localaddr.sin_port);
-        char *p_local_ip = inet_ntoa(localaddr.sin_addr);
-        printf("client_init: p_local_ip: %s\n", p_local_ip);
-        printf("client_init: local_port: %d\n", local_port);
-    }
-
     //超时时间
 #ifdef _WIN32
     int timeout = 500;//ms
@@ -925,13 +933,34 @@ int client_init(SocketObj *obj)
 	    perror("client_init error:");
 	    return -1;
 	}
+
+    struct sockaddr_in localaddr = {};
+    socklen_t slen;
+#if 0
+    localaddr.sin_family = AF_INET;
+    localaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    localaddr.sin_port = 0;
+    //localaddr.sin_port = htons(10000 + rand() % 100);
+    
+    bind(obj->sock_fd, (struct sockaddr *)&localaddr, sizeof(sin));
+    /* Now bound,get the address */
+    if(false)
+    {
+        slen = sizeof(localaddr);
+        getsockname(obj->sock_fd, (struct sockaddr*)&localaddr, &slen);
+        int local_port = (int)ntohs(localaddr.sin_port);
+        char *p_local_ip = inet_ntoa(localaddr.sin_addr);
+        printf("client_init: p_local_ip: %s\n", p_local_ip);
+        printf("client_init: local_port: %d\n", local_port);
+    }
+#endif
     /* 设置address */
     //struct sockaddr_in addr_serv;
     memset(&obj->addr_serv, 0, sizeof(obj->addr_serv));
     obj->addr_serv.sin_family = AF_INET;
     obj->addr_serv.sin_addr.s_addr = inet_addr(obj->server_ip);
     obj->addr_serv.sin_port = htons(obj->port);//换为网络字节序
-    connect(obj->sock_fd, (struct sockaddr*)&obj->addr_serv, sizeof(obj->addr_serv));
+    ///connect(obj->sock_fd, (struct sockaddr*)&obj->addr_serv, sizeof(obj->addr_serv));
     if(true)
     {
         slen = sizeof(localaddr);
@@ -949,6 +978,7 @@ int client_init(SocketObj *obj)
 
     pthread_mutex_init(&obj->lock,NULL);
     obj->pClientInfo = (ClientInfo *)calloc(1, 2 * sizeof(ClientInfo));
+    obj->status = 1;
     if(pthread_create(&obj->recv_pid, NULL, client_recv_run, obj) < 0)
     {
         MYPRINT2("client_init: Create client_recv_run failed!\n");
