@@ -278,6 +278,16 @@ int socket_close(SocketObj *obj)
     pthread_mutex_destroy(&obj->lock);
     return ret;
 }
+int node_send_data(SocketObj *obj, char *data, int size, struct sockaddr_in addr_client, int64_t now_time)
+{
+    int ret = 0;
+    int len = sizeof(addr_client);
+    pthread_mutex_lock(&obj->lock);
+    ret = sendto(obj->sock_fd, data, size, 0, (struct sockaddr *)&addr_client, len);
+    //obj->last_send_time = now_time;
+    pthread_mutex_unlock(&obj->lock);
+    return ret;
+}
 int send_data(SocketObj *obj, char *data, int size, struct sockaddr_in addr_client, int64_t now_time)
 {
     int ret = 0;
@@ -610,7 +620,7 @@ int ping_loop(SocketObj *obj, ClientInfo *thisClientInfo)
                             p->last_send_time = now_time;
                             pthread_mutex_unlock(&obj->lock);
                             MYPRINT2("ping_loop: addr0: %s:%d \n", p->data->local_ip, p->data->local_port);
-                            ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
+                            ret = node_send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
                             pthread_mutex_lock(&obj->lock);
                         }
                         //
@@ -621,7 +631,7 @@ int ping_loop(SocketObj *obj, ClientInfo *thisClientInfo)
                             p->last_send_time = now_time;
                             pthread_mutex_unlock(&obj->lock);
                             MYPRINT2("ping_loop: addr1: %s:%d \n", p->data->remote_ip, p->data->remote_port);
-                            ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
+                            ret = node_send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
                             pthread_mutex_lock(&obj->lock);
                         }
                         //
@@ -648,7 +658,7 @@ int ping_loop(SocketObj *obj, ClientInfo *thisClientInfo)
                                 addr_client.sin_port = htons(p->data->local_port);
                                 addr_client.sin_addr.s_addr = inet_addr(p->data->local_ip);
                                 pthread_mutex_unlock(&obj->lock);
-                                ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
+                                ret = node_send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
                                 p->last_send_time = now_time;
                                 pthread_mutex_lock(&obj->lock);
                             }
@@ -657,7 +667,7 @@ int ping_loop(SocketObj *obj, ClientInfo *thisClientInfo)
                                 addr_client.sin_port = htons(p->data->remote_port);
                                 addr_client.sin_addr.s_addr = inet_addr(p->data->remote_ip);
                                 pthread_mutex_unlock(&obj->lock);
-                                ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
+                                ret = node_send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
                                 p->last_send_time = now_time;
                                 pthread_mutex_lock(&obj->lock);
                             }
@@ -841,7 +851,7 @@ int client_recv_run(SocketObj *obj)
 		            	    if(!ack)
 		            	    {
 		            	        p->ack = 1;
-		            	        ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+		            	        ret = node_send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
 		            	    }
 		            	    else{
 		            	        int ip_type = p->ip_type;
