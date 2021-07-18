@@ -135,6 +135,28 @@ def RunClient():
     print("RunClient: start stop...")
     ret = gload.lib.api_socket_stop(handle)
     print("RunClient: over")
+def RunClient2():
+    print("RunClient2: (global_host, global_port)=", global_host, global_port)
+    handle_size = 8
+    handle = create_string_buffer(handle_size)
+
+    ret = gload.lib.api_socket_start(handle, global_host.encode('utf-8'), global_port, 1)
+    ret = gload.lib.api_socket_test2(handle, 1, 0)
+    idx = 0
+    while idx >= 0:
+        if sys.version_info >= (3, 0):
+            idx = int(input('please input to exit(eg: 0 ): '))
+        else:
+            idx = int(raw_input('please input to exit(eg: 0 ): '))
+        if idx > 0:
+            ret = gload.lib.api_socket_test2(handle, 2, idx)
+        else:
+            ret = gload.lib.api_socket_test2(handle, 6, 0)
+        print("idx= ", idx)
+        #thread.status = False if idx == 0 else True
+    print("RunClient2: start stop...")
+    ret = gload.lib.api_socket_stop(handle)
+    print("RunClient2: over")
 def TestLocal():
     start_time = time.time()
     ifilename = '/home/gxh/works/datashare/InToTree_1920x1080.yuv'
@@ -165,7 +187,7 @@ if __name__ == '__main__':
     if global_type == 0:
         RunServer()
     else:
-        RunClient()
+        RunClient2()
     print('End pycall.')
 
 #python test.py 0 10.200.3.208

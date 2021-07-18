@@ -23,11 +23,13 @@ int stun_create_node(CStunNode **head0)
 int stun_add_node(CStunNode *head, CStunNode **pnew)
 {
     int ret = 0;
+    //需要去重？
     //MYPRINT2("stun_add_node: (*pnew)=%x \n", (*pnew));
     if(!(*pnew))
     {
         (*pnew) = calloc(1, sizeof(CStunNode));
     }
+    MYPRINT2("stun_add_node: (*pnew)->data->self_session_id=%d \n", (*pnew)->data->self_session_id);
     //CStunNode *head = head0;//obj->broadCastHead;
     (*pnew)->next = NULL;   //新节点指针域置NULL
     head->tail->next = *pnew;  //新节点插入到表尾

@@ -356,12 +356,13 @@ typedef struct{
 }FileRtpObj;
 
 #if 1
-//#define HEARTBEAT_TIME  20000 //20s
-#define HEARTBEAT_TIME  2000 //2s //test
+#define HEARTBEAT_TIME  20000 //20s
+//#define HEARTBEAT_TIME  2000 //2s //test
 #define MAX_MTU_SIZE 1400
 
 typedef enum{
     kReg = 1,
+    kPeers,
     kPing,
     kHeartBeat,
     kBye,
@@ -371,17 +372,27 @@ typedef enum{
     kFather = 1,
     kSon,
 }ACTORType;
+typedef enum{
+    kFile = 1,
+    kText,
+    kAudio,
+    kAV,
+}ACTOINType;
 
 typedef struct{
     char local_ip[16];
-    char remote_ip[16];//255.255.255.255
+    char remote_ip[16];//255.255.255.255//external
     unsigned int local_port : 16;
-    unsigned int remote_port : 16;
+    unsigned int remote_port : 16;//external
     unsigned int session_id;
+    unsigned int self_session_id;
     unsigned int passwd;
     unsigned int cmdtype : 8;
     unsigned int actor : 3;
     unsigned int client_id : 16;
+    unsigned int action : 3;
+    unsigned int ip_type : 1;//0:local; 1: external
+    unsigned int ack : 1;
     unsigned int time_stamp0;
     unsigned int time_stamp1;
 }StunInfo;
@@ -391,6 +402,10 @@ struct CStunInfo {
     int id;
     StunInfo *data;
     int size;
+    int cnn_status;//1:local; 2: exteranl
+    int64_t last_send_time;
+    int ping_times;
+    unsigned int session_id;
     struct sockaddr_in addr_client;
     struct CStunInfo *tail;
     struct CStunInfo *next;
@@ -409,14 +424,15 @@ typedef struct{
     pthread_mutex_t lock;
     pthread_t recv_pid;
     pthread_t hb_pid;
-    pthread_t send_pid;
+    pthread_t ping_pid0;
+    pthread_t ping_pid1;
     int status;
     StunInfo stunInfo;
     char local_ip[16];
     unsigned short local_port;
     ClientInfo *pClientInfo;
     int type;
-    int64_t last_send_time;
+    int64_t last_send_time;//to server
 }SocketObj;
 #endif
 

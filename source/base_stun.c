@@ -244,6 +244,30 @@ int socket_close(SocketObj *obj)
             free(p0);
         }
     }
+    if(obj->ping_pid0 > 0)
+    {
+        char *p0;
+        if (pthread_join(obj->ping_pid0, (void**)&p0))
+        {
+            MYPRINT2("socket_close: xxx_ping_run thread is not exit...\n");
+        }
+        else{
+            MYPRINT2("socket_close: p0=%s \n", p0);
+            free(p0);
+        }
+    }
+    if(obj->ping_pid1 > 0)
+    {
+        char *p0;
+        if (pthread_join(obj->ping_pid1, (void**)&p0))
+        {
+            MYPRINT2("socket_close: xxx_ping_run thread is not exit...\n");
+        }
+        else{
+            MYPRINT2("socket_close: p0=%s \n", p0);
+            free(p0);
+        }
+    }
 
 
 #if defined (WIN32)
@@ -315,10 +339,13 @@ int send_stun_list(SocketObj *obj, CStunNode *head, CStunNode *pnew, struct sock
     int ret = 0;
     if(head->num > 1)
     {
+        MYPRINT2("send_stun_list: head->num=%d \n", head->num);
         char send_buf[MAX_MTU_SIZE] = "";
         int data_len = MAX_MTU_SIZE;
         int offset = 0;
         int info_size = sizeof(StunInfo);
+        uint32_t session_id = pnew->data->session_id;
+        uint32_t self_session_id = pnew->data->self_session_id;
         //send the new client to others
         CStunNode *p;
         p = head;
@@ -327,7 +354,11 @@ int send_stun_list(SocketObj *obj, CStunNode *head, CStunNode *pnew, struct sock
             CStunNode *info = (CStunNode *)p;
             if(p)
             {
-                ret = send_data(obj, pnew->data, info_size, p->addr_client, now_time);//send the new client to others
+                p->data->cmdtype = kPeers;
+                if(p->data->self_session_id != self_session_id)
+                {
+                    ret = send_data(obj, pnew->data, info_size, p->addr_client, now_time);//send the new client to others
+                }
                 memcpy(&send_buf[offset], p->data, info_size);
                 offset += info_size;
                 if((offset + info_size) > MAX_MTU_SIZE)
@@ -394,22 +425,24 @@ int server_recv_run(SocketObj *obj)
                 strcpy(p->remote_ip, p_remote_ip);
                 p->remote_port = (uint16_t)remote_port;
                 p->session_id = this_session_id;
-                if(!this_session_id || (this_session_id > glob_session_id))
+                if(!this_session_id && (cmdtype == kReg))
                 {
                     MYPRINT2("server_recv_run: this_session_id=%u, glob_session_id=%u \n", this_session_id, glob_session_id);
                     glob_session_id++;
                     this_session_id = glob_session_id;
                     p->session_id = this_session_id;
+                    p->self_session_id = this_session_id;
                     //
                     ClientInfo *thisClientInfo = &obj->pClientInfo[this_session_id % MAX_ONLINE_NUM];
                     stun_create_node(&thisClientInfo->head);
+                    thisClientInfo->head->session_id = this_session_id;
                     CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
                     pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
                     memcpy(pnew->data, p, sizeof(StunInfo));
                     pnew->addr_client = addr_client;
                     int client_id = stun_add_node(thisClientInfo->head, &pnew);
                     p->client_id = client_id;
-                    ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+                    ret = send_data(obj, (char *)p, sizeof(StunInfo), addr_client, now_time);//获得session_id
                 }
                 else if(this_session_id > 0 && (this_session_id <= glob_session_id))
                 {
@@ -418,35 +451,38 @@ int server_recv_run(SocketObj *obj)
                     {
                         switch (cmdtype)
 		                {
-		                	case kReg:
+		                	case kPeers:
 		                	{
-		                	    CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
-                                pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
-                                memcpy(pnew->data, p, sizeof(StunInfo));
-                                pnew->addr_client = addr_client;
-                                int client_id = stun_add_node(thisClientInfo->head, &pnew);
-                                p->client_id = client_id;
-                                ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
-                                ret = send_stun_list(obj, thisClientInfo->head, pnew, addr_client, now_time);
+		                	    if(thisClientInfo->head)
+		                	    {
+		                	        CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
+                                    pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
+                                    memcpy(pnew->data, p, sizeof(StunInfo));
+                                    pnew->addr_client = addr_client;
+                                    int client_id = stun_add_node(thisClientInfo->head, &pnew);
+                                    p->client_id = client_id;
+                                    //ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);//获得client_id
+                                    ret = send_stun_list(obj, thisClientInfo->head, pnew, addr_client, now_time);
+		                	    }
 		                	    break;
 		                	}
 		                	case kHeartBeat:
 		                	{
 		                	    MYPRINT2("server_recv_run: kHeartBeat: cmdtype=%d \n", cmdtype);
-		                	    ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+		                	    ret = send_data(obj, (char *)p, sizeof(StunInfo), addr_client, now_time);
 		                	    break;
 		                	}
 		                	case kBye:
 		                	{
 		                	    MYPRINT2("server_recv_run: kBye: cmdtype=%d ############################ \n", cmdtype);
-		                	    ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+		                	    ret = send_data(obj, (char *)p, sizeof(StunInfo), addr_client, now_time);
 		                	    break;
 		                	}
 		                	case kExit:
 		                	{
 		                	    ClientInfo *thisClientInfo = &obj->pClientInfo[this_session_id % MAX_ONLINE_NUM];
                                 stun_free_node(thisClientInfo->head);
-                                ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+                                ret = send_data(obj, (char *)p, sizeof(StunInfo), addr_client, now_time);
 		                	    break;
 		                	}
 		                	default:
@@ -527,7 +563,127 @@ int server_init(SocketObj *obj)
 
     return ret;
 }
-
+int ping_loop(SocketObj *obj, ClientInfo *thisClientInfo)
+{
+    int ret = 0;
+    unsigned int self_session_id = obj->stunInfo.self_session_id;
+    MYPRINT2("ping_loop: self_session_id=%u \n", self_session_id);
+    printf("ping_loop: addr0= %s:%d \n", obj->local_ip, (int)obj->local_port);
+    while(obj->status)
+    {
+        int64_t now_time = (int64_t)api_get_sys_time(0);
+        int info_size = sizeof(StunInfo);
+        StunInfo stunInfo;
+        memcpy(&stunInfo, &obj->stunInfo, info_size);
+        stunInfo.cmdtype = kPing;
+        stunInfo.time_stamp0 = now_time & 0xFFFFFFFF;
+        stunInfo.time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
+        CStunNode *p;
+        pthread_mutex_lock(&obj->lock);
+        CStunNode *head = thisClientInfo->head;
+        p = head;
+        do{
+            p = p->next;
+            if(p && (p->data->self_session_id != self_session_id))
+            {
+                if(!(p->cnn_status & 1) && p->ping_times < 10)
+                {
+                    MYPRINT2("ping_loop: p->ping_times=%d, p->data->self_session_id=%d \n", \
+                    p->ping_times, p->data->self_session_id);
+                    struct sockaddr_in addr_client;
+                    memset(&addr_client, 0, sizeof(addr_client));
+                    addr_client.sin_family = AF_INET;
+                    //外网通了，内网没通，则继续stun指导１０次
+                    if(!(p->cnn_status & 1))
+                    {
+                        addr_client.sin_port = htons(p->data->local_port);
+                        addr_client.sin_addr.s_addr = inet_addr(p->data->local_ip);
+                        p->last_send_time = now_time;
+                        pthread_mutex_unlock(&obj->lock);
+                        MYPRINT2("ping_loop: addr0: %s:%d \n", p->data->local_ip, p->data->local_port);
+                        ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
+                        pthread_mutex_lock(&obj->lock);
+                    }
+                    //
+                    if(!(p->cnn_status & 2))
+                    {
+                        addr_client.sin_port = htons(p->data->remote_port);
+                        addr_client.sin_addr.s_addr = inet_addr(p->data->remote_ip);
+                        p->last_send_time = now_time;
+                        pthread_mutex_unlock(&obj->lock);
+                        MYPRINT2("ping_loop: addr1: %s:%d \n", p->data->remote_ip, p->data->remote_port);
+                        ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
+                        pthread_mutex_lock(&obj->lock);
+                    }
+                    //
+                    p->ping_times++;
+                }
+                else if(p->cnn_status)
+                {
+                    int64_t last_time = p->last_send_time;
+                    int difftime = (int)(now_time - last_time);
+                    int interval = HEARTBEAT_TIME;
+                    //int wait_time = (interval - difftime);// #199, 200, 300
+                    //wait_time = wait_time < 1000 ? 1000 : wait_time;
+                    //# 周期内无网络传输；
+                    //# 周期内有网络传输，且在100秒前;
+                    //# 100秒内已发生过网络传输，则取消当下发送；
+                    //# 心跳包最大间隔为为300s
+                    if(difftime > interval)
+                    {
+                        stunInfo.cmdtype = kHeartBeat;
+                        struct sockaddr_in addr_client;
+                        if(!(p->cnn_status & 1))
+                        {
+                            addr_client.sin_port = htons(p->data->local_port);
+                            addr_client.sin_addr.s_addr = inet_addr(p->data->local_ip);
+                            pthread_mutex_unlock(&obj->lock);
+                            ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
+                            p->last_send_time = now_time;
+                            pthread_mutex_lock(&obj->lock);
+                        }
+                        else if(!(p->cnn_status & 2))
+                        {
+                            addr_client.sin_port = htons(p->data->remote_port);
+                            addr_client.sin_addr.s_addr = inet_addr(p->data->remote_ip);
+                            pthread_mutex_unlock(&obj->lock);
+                            ret = send_data(obj, (char *)&stunInfo, info_size, addr_client, now_time);
+                            p->last_send_time = now_time;
+                            pthread_mutex_lock(&obj->lock);
+                        }
+                    }
+                }
+            }
+        }while(p->next);
+        pthread_mutex_unlock(&obj->lock);
+        usleep(100 * 1000);
+    }
+    return ret;
+}
+int ping0_run(SocketObj *obj)
+{
+    int ret = 0;
+    MYPRINT2("ping0_run \n");
+    ClientInfo *thisClientInfo = &obj->pClientInfo[0];//
+    ret = ping_loop(obj, thisClientInfo);
+    //
+    char *p = malloc(32);
+    strcpy(p,"ping0_run exit");
+    pthread_exit((void*)p);
+    return ret;
+}
+int ping1_run(SocketObj *obj)
+{
+    int ret = 0;
+    MYPRINT2("ping1_run \n");
+    ClientInfo *thisClientInfo = &obj->pClientInfo[1];//
+    ret = ping_loop(obj, thisClientInfo);
+    //
+    char *p = malloc(32);
+    strcpy(p,"ping1_run exit");
+    pthread_exit((void*)p);
+    return ret;
+}
 int client_recv_run(SocketObj *obj)
 {
     int ret = 0;
@@ -566,6 +722,7 @@ int client_recv_run(SocketObj *obj)
             char *data = recv_buf;
             StunInfo *p = (StunInfo *)data;
             uint32_t this_session_id = p->session_id;
+            uint32_t self_session_id = p->self_session_id;
             int actor = p->actor;
             int cmdtype = p->cmdtype;
             uint64_t time_stamp0 = p->time_stamp0;
@@ -577,26 +734,135 @@ int client_recv_run(SocketObj *obj)
             this_session_id, p->remote_ip, p->remote_port);
             if(this_session_id > 0)
             {
-                if(!obj->stunInfo.session_id)
+                if(!obj->stunInfo.session_id && (cmdtype == kReg))
                 {
-                    ClientInfo *thisClientInfo = &obj->pClientInfo[0];
+                    //
+                    pthread_mutex_lock(&obj->lock);
+                    ClientInfo *thisClientInfo = &obj->pClientInfo[0];//
                     stun_create_node(&thisClientInfo->head);
+                    thisClientInfo->head->session_id = this_session_id;
                     CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
                     pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
                     memcpy(pnew->data, p, sizeof(StunInfo));
                     pnew->addr_client = addr_client;
                     stun_add_node(thisClientInfo->head, &pnew);
-                    memcpy(&obj->stunInfo, p, sizeof(StunInfo));
+                    pthread_mutex_unlock(&obj->lock);
                     //
-                    p->cmdtype = kBye;
-                    ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);//test
+                    memcpy(&obj->stunInfo, p, sizeof(StunInfo));
+                    obj->stunInfo.self_session_id = this_session_id;
+                    //
+                    //p->cmdtype = kBye;
+                    //ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);//test
                 }
                 else{
-                    if(obj->stunInfo.session_id != this_session_id)
-                    {
-                        MYPRINT2("warning: client_recv_run: this_session_id=%d, obj->stunInfo.session_id=%d \n", \
-                        this_session_id, obj->stunInfo.session_id);
-                    }
+                    switch (cmdtype)
+		            {
+		            	case kPeers:
+		            	{
+		            	    int offset = 0;
+		            	    int info_size = sizeof(StunInfo);
+		            	    MYPRINT2("client_recv_run: kPeers \n" );
+		            	    //
+		            	    pthread_mutex_lock(&obj->lock);
+		            	    ClientInfo *thisClientInfo = &obj->pClientInfo[0];//
+
+		            	    if(this_session_id != obj->stunInfo.self_session_id)
+		            	    {
+		            	        thisClientInfo = &obj->pClientInfo[1];//
+		            	        stun_create_node(&thisClientInfo->head);
+		            	        thisClientInfo->head->session_id = this_session_id;
+		            	    }
+		            	    pthread_mutex_unlock(&obj->lock);
+		            	    //
+		            	    while(offset < recv_num)
+		            	    {
+		            	        p = (StunInfo *)&data[offset];
+		            	        //
+		            	        pthread_mutex_lock(&obj->lock);
+		            	        CStunNode *pnew = (CStunNode *)calloc(1, sizeof(CStunNode));
+                                pnew->data = (StunInfo *)calloc(1, sizeof(StunInfo));
+                                memcpy(pnew->data, p, sizeof(StunInfo));
+                                //pnew->addr_client = addr_client;
+                                if(p->self_session_id != thisClientInfo->head->session_id)
+                                {
+                                    stun_add_node(thisClientInfo->head, &pnew);
+                                }
+                                MYPRINT("client_init: thisClientInfo->head->num=%d \n", thisClientInfo->head->num);
+                                pthread_mutex_unlock(&obj->lock);
+                                //
+		            	        offset += info_size;
+		            	    }
+		            	    MYPRINT2("client_init: obj->ping_pid0=%d, obj->ping_pid1=%d \n", obj->ping_pid0, obj->ping_pid1);
+		            	    if(this_session_id != obj->stunInfo.self_session_id)
+		            	    {
+		            	        MYPRINT2("client_init: 1: thisClientInfo->head->num=%d \n", thisClientInfo->head->num);
+                                if(!obj->ping_pid1 && thisClientInfo->head->num > 1)
+		            	        {
+		            	            if(pthread_create(&obj->ping_pid1, NULL, ping1_run, obj) < 0)
+                                    {
+                                        MYPRINT2("client_init: Create heart_beat_run failed!\n");
+                                    }
+		            	        }
+		            	    }
+		            	    else
+		            	    {
+		            	        MYPRINT2("client_init: 0: thisClientInfo->head->num=%d \n", thisClientInfo->head->num);
+		            	        if(!obj->ping_pid0 && thisClientInfo->head->num > 1)
+		            	        {
+		            	            if(pthread_create(&obj->ping_pid0, NULL, ping0_run, obj) < 0)
+                                    {
+                                        MYPRINT2("client_init: Create heart_beat_run failed!\n");
+                                    }
+		            	        }
+		            	    }
+		            	    break;
+		            	}
+		            	case kPing:
+		            	{
+		            	    int ack = p->ack;
+		            	    MYPRINT2("client_recv_run: kPing \n" );
+		            	    if(!ack)
+		            	    {
+		            	        p->ack = 1;
+		            	        ret = send_data(obj, data, sizeof(StunInfo), addr_client, now_time);
+		            	    }
+		            	    else{
+		            	        int ip_type = p->ip_type;
+		            	        //
+		            	        pthread_mutex_lock(&obj->lock);
+		            	        ClientInfo *thisClientInfo = &obj->pClientInfo[0];//
+		            	        if(this_session_id != obj->stunInfo.self_session_id)
+		            	        {
+		            	            thisClientInfo = &obj->pClientInfo[1];//
+		            	        }
+		            	        CStunNode *q = thisClientInfo->head;
+                                do{
+                                    q = q->next;
+                                    if(q && q->data->self_session_id == self_session_id)
+                                    {
+                                        q->cnn_status |= 1 << ip_type;
+                                        break;
+                                    }
+                                }while(q->next);
+		            	        pthread_mutex_unlock(&obj->lock);
+		            	        //
+		            	        MYPRINT2("client_recv_run: kPing: sucess \n" );
+		            	    }
+
+		            	    break;
+		            	}
+		            	case kHeartBeat:
+		            	{
+		            	    MYPRINT2("client_recv_run: kHeartBeat \n" );
+		            	    break;
+		            	}
+		            	default:
+		            	{
+		            	    MYPRINT2("warning: client_recv_run: this_session_id=%d, obj->stunInfo.session_id=%d, cmdtype=%d \n", \
+                            this_session_id, obj->stunInfo.session_id, cmdtype);
+		            	    break;
+		            	}
+		            }
                 }
             }
         }
@@ -674,11 +940,15 @@ int client_init(SocketObj *obj)
         char *p_local_ip = inet_ntoa(localaddr.sin_addr);
         printf("client_init: p_local_ip: %s\n", p_local_ip);
         printf("client_init: local_port: %d\n", local_port);
+        obj->local_port = (uint16_t)local_port;
+        strcpy(obj->local_ip, p_local_ip);
+        obj->stunInfo.local_port = (uint16_t)local_port;
+        strcpy(obj->stunInfo.local_ip, p_local_ip);
     }
     //get_local_port(obj->sock_fd);//test
 
     pthread_mutex_init(&obj->lock,NULL);
-    obj->pClientInfo = (ClientInfo *)calloc(1, 1 * sizeof(ClientInfo));
+    obj->pClientInfo = (ClientInfo *)calloc(1, 2 * sizeof(ClientInfo));
     if(pthread_create(&obj->recv_pid, NULL, client_recv_run, obj) < 0)
     {
         MYPRINT2("client_init: Create client_recv_run failed!\n");
@@ -738,8 +1008,11 @@ int api_socket_stop(char *handle)
                 }
             }
             else{
-                ClientInfo *thisClientInfo = &obj->pClientInfo[0];
-                stun_free_node(thisClientInfo->head);
+                for(int i = 0; i < 2; i++)
+                {
+                    ClientInfo *thisClientInfo = &obj->pClientInfo[i % MAX_ONLINE_NUM];
+                    stun_free_node(thisClientInfo->head);
+                }
             }
 
             free(obj->pClientInfo);
@@ -749,6 +1022,61 @@ int api_socket_stop(char *handle)
     }
     return ret;
 }
+
+
+FQT_API
+int api_socket_test2(char *handle, int cmdtype, int session_id)
+{
+    int ret = 0;
+    int64_t *testp = (int64_t *)handle;
+    SocketObj *obj = (SocketObj *)testp[0];
+    if(obj)
+    {
+        char send_buf[1500] = "";
+        int send_size = 300;
+        int delay_time0 = 500 * 1000;
+        int i = 0;
+        {
+            char *data = send_buf;
+            StunInfo *p = (StunInfo *)data;
+            obj->stunInfo.local_port = obj->local_port;
+            strcpy(obj->stunInfo.local_ip, obj->local_ip);
+
+            memcpy(p, &obj->stunInfo, sizeof(StunInfo));
+            if(session_id > 0)
+            {
+                p->session_id = session_id;
+                MYPRINT2("api_socket_test2: p->self_session_id=%d \n", p->self_session_id);
+            }
+            else{
+                p->session_id = obj->stunInfo.self_session_id;
+            }
+            p->cmdtype = cmdtype;
+
+
+            int64_t now_time = (int64_t)api_get_sys_time(0);
+			p->time_stamp0 = now_time & 0xFFFFFFFF;
+			p->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
+            ret = send_data(obj, (char *)p, sizeof(StunInfo), obj->addr_serv, now_time);
+            if(false)
+            {
+                struct sockaddr_in localaddr = {};
+                socklen_t slen;
+                slen = sizeof(localaddr);
+                getsockname(obj->sock_fd, (struct sockaddr*)&localaddr, &slen);
+                int local_port = (int)ntohs(localaddr.sin_port);
+                char *p_local_ip = inet_ntoa(localaddr.sin_addr);
+                printf("api_socket_test2: addr0= %s:%d \n", p_local_ip, local_port);
+                obj->local_port = (uint16_t)local_port;
+                strcpy(obj->local_ip, p_local_ip);
+                obj->stunInfo.local_port = obj->local_port;
+                strcpy(obj->stunInfo.local_ip, obj->local_ip);
+            }
+        }
+    }
+    return ret;
+}
+
 FQT_API
 int api_socket_test(char *handle, int session_id)
 {
@@ -767,7 +1095,7 @@ int api_socket_test(char *handle, int session_id)
             StunInfo *p = (StunInfo *)data;
             obj->stunInfo.local_port = obj->local_port;
             strcpy(obj->stunInfo.local_ip, obj->local_ip);
-            obj->stunInfo.cmdtype = 0;
+            obj->stunInfo.cmdtype = kPeers;
             obj->stunInfo.actor = kFather;
 
             if(!obj->stunInfo.session_id)
