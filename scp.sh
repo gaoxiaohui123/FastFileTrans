@@ -14,7 +14,7 @@ scp $DST_DIR/FastFileTrans/source/base_stun.c $SRC_DIR/FastFileTrans/source/
 #scp $DST_DIR/FastFileTrans/include/file_rtp.h $SRC_DIR/FastFileTrans/include/
 #scp $DST_DIR/FastFileTrans/test.py $SRC_DIR/FastFileTrans/
 #scp -r $SRC_DIR/FastFileTrans $DST_DIR/ 
-
+#scp $SRC_DIR/FastFileTrans/source/base_stun.c $DST_DIR/FastFileTrans/source/
 
 
 

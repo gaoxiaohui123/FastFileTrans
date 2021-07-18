@@ -914,25 +914,6 @@ int client_init(SocketObj *obj)
         perror("client_init: socket");
         return -1;
     }
-    struct sockaddr_in localaddr = {};
-    socklen_t slen;
-    localaddr.sin_family = AF_INET;
-    localaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    localaddr.sin_port = 0;
-
-    bind(obj->sock_fd, (struct sockaddr *)&localaddr, sizeof(sin));
-    //connect(obj->sock_fd, sizeof(sin));
-    /* Now bound,get the address */
-    if(false)
-    {
-        slen = sizeof(localaddr);
-        getsockname(obj->sock_fd, (struct sockaddr*)&localaddr, &slen);
-        int local_port = (int)ntohs(localaddr.sin_port);
-        char *p_local_ip = inet_ntoa(localaddr.sin_addr);
-        printf("client_init: p_local_ip: %s\n", p_local_ip);
-        printf("client_init: local_port: %d\n", local_port);
-    }
-
     //超时时间
 #ifdef _WIN32
     int timeout = 500;//ms
@@ -952,13 +933,34 @@ int client_init(SocketObj *obj)
 	    perror("client_init error:");
 	    return -1;
 	}
+
+    struct sockaddr_in localaddr = {};
+    socklen_t slen;
+#if 0
+    localaddr.sin_family = AF_INET;
+    localaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    localaddr.sin_port = 0;
+    //localaddr.sin_port = htons(10000 + rand() % 100);
+    
+    bind(obj->sock_fd, (struct sockaddr *)&localaddr, sizeof(sin));
+    /* Now bound,get the address */
+    if(false)
+    {
+        slen = sizeof(localaddr);
+        getsockname(obj->sock_fd, (struct sockaddr*)&localaddr, &slen);
+        int local_port = (int)ntohs(localaddr.sin_port);
+        char *p_local_ip = inet_ntoa(localaddr.sin_addr);
+        printf("client_init: p_local_ip: %s\n", p_local_ip);
+        printf("client_init: local_port: %d\n", local_port);
+    }
+#endif
     /* 设置address */
     //struct sockaddr_in addr_serv;
     memset(&obj->addr_serv, 0, sizeof(obj->addr_serv));
     obj->addr_serv.sin_family = AF_INET;
     obj->addr_serv.sin_addr.s_addr = inet_addr(obj->server_ip);
     obj->addr_serv.sin_port = htons(obj->port);//换为网络字节序
-    connect(obj->sock_fd, (struct sockaddr*)&obj->addr_serv, sizeof(obj->addr_serv));
+    ///connect(obj->sock_fd, (struct sockaddr*)&obj->addr_serv, sizeof(obj->addr_serv));
     if(true)
     {
         slen = sizeof(localaddr);
