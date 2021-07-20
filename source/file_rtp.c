@@ -62,7 +62,9 @@ extern void file_delete_node_by_id(FileNode *head, int id);
 extern void file_free_node(FileNode *head);
 #endif
 
+
 #if 1
+int glob_time_offset = 0;
 #ifdef _WIN32
 #include <time.h>
 #include <windows.h>
@@ -75,6 +77,19 @@ int64_t get_sys_time()
 	//gettimeofday(&tEnd, NULL);
 	//long deltaTime = 1000000L * (tEnd.tv_sec - tBegin.tv_sec) + (tEnd.tv_usec - tBegin.tv_usec);
 	int64_t time = (1000000L * (int64_t)tBegin.tv_sec + tBegin.tv_usec) / 1000;//us-->ms
+	time -= glob_time_offset;
+    return time;
+}
+int64_t get_sys_time2()
+{
+	struct timespec tBegin;
+	//struct timeval tEnd;
+	gettimeofday(&tBegin, NULL);
+	//...process
+	//gettimeofday(&tEnd, NULL);
+	//long deltaTime = 1000000L * (tEnd.tv_sec - tBegin.tv_sec) + (tEnd.tv_usec - tBegin.tv_usec);
+	//int64_t time = (1000000L * (int64_t)tBegin.tv_sec + tBegin.tv_usec);//us
+	int64_t time = (1000000000L * (int64_t)tBegin.tv_sec + tBegin.tv_nsec);//ns
     return time;
 }
 #else
@@ -88,9 +103,33 @@ int64_t get_sys_time()
 	//gettimeofday(&tEnd, NULL);
 	//long deltaTime = 1000000L * (tEnd.tv_sec - tBegin.tv_sec) + (tEnd.tv_usec - tBegin.tv_usec);
 	int64_t time = (1000000L * tBegin.tv_sec + tBegin.tv_usec) / 1000;//us-->ms
+	time -= glob_time_offset;
+    return time;
+}
+int64_t get_sys_time2()
+{
+	struct timespec tBegin;
+	//struct timeval tEnd;
+	gettimeofday(&tBegin, NULL);
+	//...process
+	//gettimeofday(&tEnd, NULL);
+	//long deltaTime = 1000000L * (tEnd.tv_sec - tBegin.tv_sec) + (tEnd.tv_usec - tBegin.tv_usec);
+	//int64_t time = (1000000L * (int64_t)tBegin.tv_sec + tBegin.tv_usec);//us
+	int64_t time = (1000000000L * (int64_t)tBegin.tv_sec + tBegin.tv_nsec);//ns
     return time;
 }
 #endif
+
+
+FQT_API
+unsigned int api_create_id(unsigned int range)
+{
+    int ret = 0;
+    unsigned int seed = (unsigned int)get_sys_time2();
+    srand(seed);
+    ret = rand() % range;
+    return ret;
+}
 FQT_API
 int64_t api_get_sys_time(int delay)
 {
@@ -103,6 +142,7 @@ int64_t api_get_sys_time(int delay)
 }
 
 #endif
+
 void paced_send(int64_t bitrate, int sendDataLen, int difftime, int64_t sumbytes)
 {
     int usedtime = difftime * 1000;//us

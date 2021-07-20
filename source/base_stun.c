@@ -58,6 +58,8 @@ extern void stun_free_node(CStunNode *head);
 
 static unsigned int glob_session_id = 1;
 
+
+
 // 根据域名获取ip
 int get_ip_by_domain(const char *domain, char *ip)
 {
@@ -936,11 +938,11 @@ int client_init(SocketObj *obj)
 
     struct sockaddr_in localaddr = {};
     socklen_t slen;
-#if 0
+#if 1
     localaddr.sin_family = AF_INET;
     localaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     localaddr.sin_port = 0;
-    //localaddr.sin_port = htons(10000 + rand() % 100);
+    localaddr.sin_port = htons(10000 + api_create_id(100));
     
     bind(obj->sock_fd, (struct sockaddr *)&localaddr, sizeof(sin));
     /* Now bound,get the address */
@@ -1088,7 +1090,7 @@ int api_socket_test2(char *handle, int cmdtype, int session_id)
 			p->time_stamp0 = now_time & 0xFFFFFFFF;
 			p->time_stamp1 = (now_time >> 32) & 0xFFFFFFFF;
             ret = send_data(obj, (char *)p, sizeof(StunInfo), obj->addr_serv, now_time);
-            if(false)
+            if(true)
             {
                 struct sockaddr_in localaddr = {};
                 socklen_t slen;
